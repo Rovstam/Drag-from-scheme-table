@@ -7,7 +7,7 @@
     "minGameVersion": "158.1",
     "dependencies": ["extended-ui"],
     "main": "scripts/main",
-    "hidden": false,
+    "hidden": true,
     "java": false,
     "script": true
 }
