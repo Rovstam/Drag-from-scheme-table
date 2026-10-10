@@ -1,61 +1,82 @@
-# Drag from Scheme Table — Project Context
+# Drag from Scheme Table — Agent Context
 
-## User request and scope
+## User request and hard scope
 
-Make a Mindustry mod that extends Salivion's Extended UI schematic table. Clicking a move/unlock icon enables rearranging: select a schematic slot, then select its destination. If that destination already contains a schematic, ask before replacing it. Keep the source unchanged if the user cancels confirmation. The user explicitly requires edits to stay inside this mod folder; Mindustry source may be inspected for reference but not modified, and other mods must not be edited.
+This Mindustry Rhino JavaScript script mod extends Salivion's Extended UI schematic table. The user has confirmed the mod **functionally works**.
 
-## Workspace and installation
+Requested behavior:
+- A visible **MOVE** toggle above the EUI schematic table enables move mode.
+- In move mode, clicking a populated slot selects it and highlights it; clicking another slot moves the schematic there.
+- If the destination is occupied, ask for confirmation before changing either slot. Cancel must leave both unchanged.
+- Transfer the source slot's custom image setting with the schematic and clear the source slot.
+- Category tabs stay clickable while a source is selected; cross-category moves are supported.
+- Outside move mode, existing schematic-table behavior is unchanged.
 
-- Editable project folder: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\saves\mods\Drag from scheme table`
+The user explicitly says: **edit only files inside this mod folder**. Mindustry source may be read as reference, but do not modify it. Do not edit Extended UI or any other mod.
+
+## Project paths and packaging
+
+- Editable folder: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\saves\mods\Drag from scheme table`
 - Main script: `scripts\main.js`
 - Manifest: `mod.hjson`
-- Localized strings: `bundles\bundle.properties`
-- User-data mod folder observed: `C:\Users\PERSONAL\AppData\Roaming\Mindustry\mods`
-- Mindustry does not auto-load from the Steam installation's `saves\mods` directory. To test local changes, package/import the mod from this folder or otherwise ensure the active installed copy is updated. Remove/replace older imported copies to avoid testing stale code.
-- A package ZIP is generated in this folder as `Drag-from-scheme-table.zip`; keep it synchronized with source files whenever those change.
-- Mindustry source reference available at `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\Mindustry-160.5`. A previous user-data log (dated July 6, 2026) reported version 158.1; treat that log as historical, not proof of the current running game version.
+- Strings: `bundles\bundle.properties`
+- The user's firm version preference: keep `version` at **1.0.1**. Do not bump version numbers for future fixes unless the user specifically asks.
+- Local Mindustry source reference: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\Mindustry-160.5`
+- Old `last_log.txt` inspected during earlier work was dated 2026-07-06, reported Mindustry 158.1, and did not list this mod. It is not evidence about a later launch. Do not ask for logs as the default response to a user who already says the mod loads/works; investigate code directly first.
 
-## Target mod details
+## Current manifest
 
-The mod is a Mindustry JavaScript script mod with internal name `drag-scheme-table`, depending on `extended-ui`. Current manifest version: 1.0.5; minimum game version: 158.1. The script registers on `ClientLoadEvent`, creates a lock toggle above the table, and uses Extended UI's `global.eui.registerUpdate`.
+- Internal name: `drag-scheme-table`
+- Display name: `Drag from Scheme Table`
+- Script mod, main `scripts/main`
+- Required dependency: `extended-ui`
+- `minGameVersion`: `158.1`
+- `version`: `1.0.1` (keep fixed)
 
-The source Extended UI archive was inspected at `saves\mods\salivionextended-ui.zip`. Relevant behavior from its `scripts\ui\other\schematics-table-ui.js`:
+## Verified Extended UI integration
 
-- HUD table name is `eui-schematics-table`.
-- Table visibility is gated by `eui-ShowSchematicsTable` and whether the HUD is shown.
-- Defaults are 4 rows and 5 columns (`eui-SchematicsTableRows`, `eui-SchematicsTableColumns`).
-- The schematic grid is rebuilt by clearing/rebuilding its child table; slot buttons are newly created on rebuild.
-- Normal click invokes `Vars.control.input.useSchematic(schematic)`.
-- Desktop right-click edits a slot; mobile double-tap edits it.
-- Schematic setting keys are `schematic<category>.<column>.<row>`; custom image is the key plus `image`.
-- Category buttons occupy the first button group; schematic slots follow them.
-- Extended UI creates its table in HUD and calls `toBack()`, so any separate move control must be brought forward while visible.
+Reference is the user's `saves\mods\salivionextended-ui.zip`, internal mod name `extended-ui`, particularly `scripts/ui/other/schematics-table-ui.js`.
 
-## Current intended behavior / implementation
+- Global update integration: `global.eui.registerUpdate(fn)`.
+- Rebuild API: `global.eui.schematicsTableUI.rebuildTable()`.
+- HUD table name: `eui-schematics-table`.
+- EUI destroys/recreates the table on rebuild; slot-button objects are replaced. The add-on compares object identities and binds each new set.
+- Table structure: outer table -> wrapped child table -> category-button table at child index 0, category label at index 1, schematic-button table at index 2.
+- Category count equals configured `eui-SchematicsTableColumns`; slot count is `eui-SchematicsTableRows * eui-SchematicsTableColumns`. Default grid: 4 rows by 5 columns.
+- EUI puts its table at the back of the HUD group; keep the separate MOVE control brought to front while the table is visible.
+- Slot key format: `schematic<category>.<column>.<row>`. Custom image key is the slot key plus `image`.
+- Normal slot action calls `Vars.control.input.useSchematic(schematic)`.
+- Desktop right-click opens EUI slot editing; mobile uses its existing double-tap behavior.
 
-- Move mode off: slot clicks should continue to use schematics as before.
-- Move mode on: clicking a populated slot selects it; clicking another slot moves the entry there. Clicking the selected source again cancels selection.
-- Occupied destination: confirmation is required before any settings change. Confirm overwrites destination and clears source; cancel changes neither.
-- Move the source slot's custom image setting to the destination and remove the old source image setting.
-- Rebuild Extended UI's table after the move.
-- Current script resolves the known EUI table structure directly: outer table -> wrapped table -> category button table at child 0, label at child 1, schematic button table at child 2. It attaches a capture `InputListener` to the table itself, not individual slots. On left touch-down it uses `table.hit(x, y, true)` to identify a schematic slot, stops that event, and completes the move on matching touch-up. Category-button hits are not consumed. It identifies/rebinds the listener when EUI rebuilds the outer table and preserves cross-category selection.
-- Debug log stages include `Script evaluated. Version 1.0.5.`, `ClientLoadEvent received.`, `Loaded v1.0.5.`, `Bound N schematic slots.`, `Move mode ON/OFF`, `touchDown captured on slot N`, `Slot click: schematic...`, and `Moved ...`. Update/setup failures are logged with a `[Drag from Scheme Table]` prefix.
+## Working implementation in `scripts/main.js`
 
-## Known concerns / next debugging work
+- `ClientLoadEvent` checks for `global.eui.registerUpdate`, creates a separate text button labeled **MOVE** (`Styles.defaultt`), and registers the update callback.
+- The pencil icon seen on empty EUI slots is not a reliable move-mode indicator; keep the clear text label unless user requests otherwise.
+- The update callback finds `eui-schematics-table`, reads the actual EUI layout, verifies category/slot counts, and attaches a capture `InputListener` directly to each schematic slot button.
+- Category buttons receive no listener from this mod. In move mode, left-button touch-down on a slot is consumed and touch-up selects/moves that slot. With move mode disabled, the listener returns false, allowing EUI's ordinary click behavior to run.
+- A selected source is represented by `{key, name}` and the selected slot is highlighted. Category selection is resolved from the live category buttons when the next slot is clicked, supporting cross-category moves.
+- Replacing an occupied destination is done only in the confirm callback. The operation checks that source and destination settings have not changed, transfers custom image settings, clears the source, and calls EUI's exported rebuild function.
+- EUI update callbacks can swallow errors in its central loop; retain the add-on's prefixed `Log.err` handling and DEBUG stage logs while the user is still validating behavior.
+- The working direct-slot-listener approach replaced an earlier table-level coordinate hit-test. Do not revert to table-parent coordinate hit testing without a specific reason.
 
-- The implementation has **not been runtime-verified in Mindustry**. Node mock tests exercise startup callback, table binding, capture/touch-up, selection, cross-category occupied replacement, image transfer, source clearing, table rebuild/rebinding, and category/normal-mode pass-through. They do not prove actual Arc/Rhino behavior.
-- The available user-data `last_log.txt` was last modified 2026-07-06 and does not mention this mod; it is stale. Request/read a fresh log from the same launch before concluding which mod copy loaded. Confirm startup/version/bind/toggle/capture/slot-click/move lines above.
-- Current import package is `Drag-from-scheme-table.zip` in this folder. Rebuild it after source changes and ensure the user replaces any older imported copy with this package before runtime testing.
-- Validate parent-table capture coordinates, stage touch focus and hit testing on the actual Arc runtime. Category tabs must remain clickable while a source slot is selected, and move mode off must pass the original EUI slot click through.
-- When modifying the mod, edit files only under the project folder above. Update the import ZIP after source changes; do not edit Extended UI or the Mindustry source.
+## Debugging notes
 
-## Verification history
+Useful current script log messages are prefixed `[Drag from Scheme Table]`, including:
+- `Script evaluated. Version 1.0.1.`
+- `ClientLoadEvent received.`
+- `Loaded v1.0.1.`
+- `Bound N schematic slots.`
+- `Move mode ON` / `Move mode OFF`
+- `touchDown captured on slot N`
+- `Slot click: schematic...`
+- `Moved schematic... -> schematic...`
+- `UI update failed: ...` or `Client load setup failed: ...`
 
-- `node --check scripts\main.js` passed for v1.0.5.
-- Mock UI interaction tests passed for startup, binding, toggle, source selection, cross-category occupied replacement confirmation, image transfer, source clearing, table rebuild/rebinding, category click pass-through, and normal-mode pass-through.
-- Package layout was checked for root `mod.hjson`, `scripts/main.js`, and `bundles/bundle.properties`; packaged script was compared byte-for-byte to the workspace source.
-- No in-game/runtime test has yet confirmed the UI works.
+The user has confirmed functional success, so treat runtime functionality as working. If a future regression is reported, fix the current code directly and use logs/source as helpful evidence; do not imply the user has not tested it.
 
-## 2026-10-10 update (v1.0.4)
+## Validation and future edits
 
-Verified against the real Extended UI source (Salivion-Extended-UI-54ad91f, mod name `extended-ui`): `global.eui.registerUpdate`, `global.eui.schematicsTableUI.rebuildTable` (exported), table name `eui-schematics-table`, and button layout (`columns` category buttons, then `rows*columns` slot buttons; the category label is not a button) all match. Notes: EUI's `rebuildTable` destroys the table and recreates it on the next update tick (new Table object); EUI's central handler swallows its own handler errors, ours logs. The slot default icon in EUI is Icon.pencil, so the move control now uses lock/lockOpen. Added: selection highlight, empty-source hint, EUI-missing guard, DEBUG logging. Still not runtime-verified in-game.
+- Prior development checks: `node --check scripts\main.js`; mock interaction coverage for direct slot capture, category pass-through, selection, cross-category replacement confirmation, custom-image transfer, source clearing, rebuild/rebinding, and normal-mode pass-through.
+- Mock tests are useful but not a replacement for in-game verification.
+- Only modify files in this project folder. Keep package ZIP synchronized with source after changes.
+- Do not change the version from 1.0.1.
