@@ -2,11 +2,15 @@
 
 This script mod adds schematic rearranging to Salivion's Extended UI schematic table.
 
-## Install
-
-Mindustry loads mods from the user data `mods` folder, not from the Steam installation's `saves\mods` folder. Import `Drag-from-scheme-table.zip` from this folder using **Settings > Mods > Import > File**, then enable **Drag from Scheme Table** and **Extended UI** and restart.
-
 ## Use
+
+1. Click the **MOVE** button.
+<img width="428" height="443" alt="image" src="https://github.com/user-attachments/assets/1e44d543-91a8-4875-bbaf-6d93f63e6adb" />
+
+3. Click a populated slot, then click the destination slot.
+https://github.com/user-attachments/assets/3d725d9b-3f1e-4fe6-b934-eb0cbfce090d
+
+5. Confirm before replacing a populated destination.
 
 1. Click the **MOVE** button attached to the schematic table's upper-left edge, above its other buttons, to enable move mode.
 2. Click a populated slot, then click the destination slot.
