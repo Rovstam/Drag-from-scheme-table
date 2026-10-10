@@ -12,7 +12,10 @@ https://github.com/user-attachments/assets/3d725d9b-3f1e-4fe6-b934-eb0cbfce090d
 
 5. Confirm before replacing a populated destination.
 
-6. Click **MOVE** again to return to normal schematic-use behavior.
+1. Click the **MOVE** button attached to the schematic table's upper-left edge, above its other buttons, to enable move mode.
+2. Click a populated slot, then click the destination slot.
+3. Confirm before replacing a populated destination.
+4. Click **MOVE** again to return to normal schematic-use behavior.
 
 Moves preserve a slot's custom image. The source slot is cleared after a successful move. Clicking the selected source again cancels the move. Ordinary table clicks are unchanged while move mode is off.
 

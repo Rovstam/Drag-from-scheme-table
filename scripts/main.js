@@ -10,15 +10,35 @@ let selectedSlot = null;
 let moveControl;
 let moveButton;
 let boundTable;
+let attachedTable;
 let boundSlotButtons = [];
 let lastUpdateError;
 let boundCategoryButtons = [];
 let boundColumns = 5;
 let waitingLogged = false;
+let lastMoveAnnouncement;
 
 const DEBUG = true;
 function dbg(message) {
     if (DEBUG) Log.info("[Drag from Scheme Table] " + message);
+}
+
+function announceMoveMessage(message) {
+    if (lastMoveAnnouncement != null) lastMoveAnnouncement.remove();
+
+    const announcement = new Table(Styles.black3);
+    announcement.touchable = Packages.arc.scene.event.Touchable.disabled;
+    announcement.margin(8).add(message).style(Styles.outlineLabel).labelAlign(Align.center);
+    announcement.update(() => {
+        announcement.setPosition(Core.graphics.getWidth() / 2, Core.graphics.getHeight() / 2, Align.center);
+        announcement.toFront();
+        if (Vars.state.isMenu() || !Vars.ui.hudfrag.shown) announcement.remove();
+    });
+    announcement.actions(Actions.fadeOut(3, Interp.pow4In), Actions.remove());
+    announcement.pack();
+    announcement.act(0.1);
+    Core.scene.add(announcement);
+    lastMoveAnnouncement = announcement;
 }
 
 dbg("Script evaluated. Version " + scriptVersion + ".");
@@ -51,7 +71,7 @@ function moveSchematic(source, destination, expectedDestination) {
 
     if (currentSource !== source.name || currentDestination !== expectedDestination) {
         selectedSlot = null;
-        Vars.ui.announce(Core.bundle.get("drag-scheme-table.move-stale"));
+        announceMoveMessage(Core.bundle.get("drag-scheme-table.move-stale"));
         return;
     }
 
@@ -68,7 +88,7 @@ function moveSchematic(source, destination, expectedDestination) {
     }
 
     selectedSlot = null;
-    Vars.ui.announce(Core.bundle.get("drag-scheme-table.move-complete"));
+    announceMoveMessage(Core.bundle.get("drag-scheme-table.move-complete"));
     dbg("Moved " + source.key + " -> " + destination);
     if (global.eui.schematicsTableUI && global.eui.schematicsTableUI.rebuildTable) {
         global.eui.schematicsTableUI.rebuildTable();
@@ -84,17 +104,17 @@ function selectOrMove(category, index, columns) {
 
     if (selectedSlot == null) {
         if (!value) {
-            Vars.ui.announce(Core.bundle.get("drag-scheme-table.no-source"));
+            announceMoveMessage(Core.bundle.get("drag-scheme-table.no-source"));
             return;
         }
         selectedSlot = { key: key, name: value };
-        Vars.ui.announce(Core.bundle.format("drag-scheme-table.source-selected", value));
+        announceMoveMessage(Core.bundle.format("drag-scheme-table.source-selected", value));
         return;
     }
 
     if (selectedSlot.key === key) {
         selectedSlot = null;
-        Vars.ui.announce(Core.bundle.get("drag-scheme-table.move-cancelled"));
+        announceMoveMessage(Core.bundle.get("drag-scheme-table.move-cancelled"));
         return;
     }
 
@@ -190,7 +210,7 @@ function createMoveControl() {
         moveMode = !moveMode;
         selectedSlot = null;
         dbg("Move mode " + (moveMode ? "ON" : "OFF"));
-        Vars.ui.announce(Core.bundle.get(moveMode
+        announceMoveMessage(Core.bundle.get(moveMode
             ? "drag-scheme-table.mode-enabled"
             : "drag-scheme-table.mode-disabled"));
     }).size(72, 36).tooltip(Core.bundle.get("drag-scheme-table.mode-tooltip")).get();
@@ -200,7 +220,18 @@ function createMoveControl() {
         const table = findTable();
         return table != null && table.visible;
     };
-    Vars.ui.hudGroup.addChild(moveControl);
+}
+
+function attachMoveControl(table) {
+    if (attachedTable !== table) {
+        if (attachedTable != null) attachedTable.removeChild(moveControl);
+        table.addChild(moveControl);
+        attachedTable = table;
+        dbg("Attached MOVE control to schematic table.");
+    }
+
+    moveControl.setPosition(0, table.getHeight(), Align.bottomLeft);
+    moveControl.toFront();
 }
 
 Events.on(ClientLoadEvent, () => {
@@ -233,12 +264,7 @@ Events.on(ClientLoadEvent, () => {
                 bindTableButtons(table);
                 moveButton.setChecked(moveMode);
                 updateHighlight();
-                moveControl.setPosition(
-                    table.getX(),
-                    table.getY() + table.getHeight(),
-                    Align.bottomLeft
-                );
-                moveControl.toFront();
+                attachMoveControl(table);
                 lastUpdateError = null;
             } catch (error) {
                 const message = String(error);
