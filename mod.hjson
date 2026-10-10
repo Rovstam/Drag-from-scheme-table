@@ -1,0 +1,13 @@
+{
+    "name": "drag-scheme-table",
+    "displayName": "Drag from Scheme Table",
+    "author": "Local",
+    "description": "Move schematics between slots in the Extended UI schematic table.",
+    "version": "1.0.1",
+    "minGameVersion": "158.1",
+    "dependencies": ["extended-ui"],
+    "main": "scripts/main",
+    "hidden": false,
+    "java": false,
+    "script": true
+}
