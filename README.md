@@ -8,7 +8,7 @@ Mindustry loads mods from the user data `mods` folder, not from the Steam instal
 
 ## Use
 
-1. Click the **MOVE** button above the schematic table to enable move mode.
+1. Click the **MOVE** button attached to the schematic table's upper-left edge, above its other buttons, to enable move mode.
 2. Click a populated slot, then click the destination slot.
 3. Confirm before replacing a populated destination.
 4. Click **MOVE** again to return to normal schematic-use behavior.
