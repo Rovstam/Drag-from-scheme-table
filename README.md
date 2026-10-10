@@ -6,9 +6,12 @@ This script mod adds schematic rearranging to Salivion's Extended UI schematic t
 
 1. Click the **MOVE** button.
 <img width="428" height="443" alt="image" src="https://github.com/user-attachments/assets/1e44d543-91a8-4875-bbaf-6d93f63e6adb" />
+
 3. Click a populated slot, then click the destination slot.
 https://github.com/user-attachments/assets/3d725d9b-3f1e-4fe6-b934-eb0cbfce090d
+
 5. Confirm before replacing a populated destination.
+
 6. Click **MOVE** again to return to normal schematic-use behavior.
 
 Moves preserve a slot's custom image. The source slot is cleared after a successful move. Clicking the selected source again cancels the move. Ordinary table clicks are unchanged while move mode is off.
