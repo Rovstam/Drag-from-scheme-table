@@ -56,6 +56,8 @@ Reference is the user's `saves\mods\salivionextended-ui.zip`, internal mod name 
 - Category buttons receive no listener from this mod. In move mode, left-button touch-down on a slot is consumed and touch-up selects/moves that slot. With move mode disabled, the listener returns false, allowing EUI's ordinary click behavior to run.
 - A selected source is represented by `{key, name}` and the selected slot is highlighted. Category selection is resolved from the live category buttons when the next slot is clicked, supporting cross-category moves.
 - Replacing an occupied destination is done only in the confirm callback. The operation checks that source and destination settings have not changed, transfers custom image settings, clears the source, and calls EUI's exported rebuild function.
+- The Extended UI setting **Enable visual schematic dragging** controls the drag gesture: when enabled, dragging onto a slot moves or swaps with confirmation as needed and shows an outlined preview; when disabled, drag gestures do nothing and click-to-select/click-to-move remains available.
+- The current preview outline uses `Styles.selecti`. The user likes it for now but wants its appearance treated as provisional and adjusted toward their intended outline in a future change.
 - EUI update callbacks can swallow errors in its central loop; retain the add-on's prefixed `Log.err` handling and DEBUG stage logs while the user is still validating behavior.
 - The working direct-slot-listener approach replaced an earlier table-level coordinate hit-test. Do not revert to table-parent coordinate hit testing without a specific reason.
 

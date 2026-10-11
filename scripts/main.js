@@ -3,10 +3,18 @@
 const rowsSetting = "eui-SchematicsTableRows";
 const columnsSetting = "eui-SchematicsTableColumns";
 const tableName = "eui-schematics-table";
-const scriptVersion = "1.0.1";
+const skipSwapConfirmationsSetting = "drag-scheme-table.skip-swap-confirmations";
+const visualDragSetting = "drag-scheme-table.visual-drag";
+const scriptVersion = "1.0.3";
+const dragThresholdSquared = 64;
+const dragPreviewScale = 1.35;
 
 let moveMode = false;
 let selectedSlot = null;
+let skipSwapConfirmations = false;
+let visualDragEnabled = true;
+let activeDrag = null;
+let dragPreview = null;
 let moveControl;
 let moveButton;
 let boundTable;
@@ -17,6 +25,9 @@ let boundCategoryButtons = [];
 let boundColumns = 5;
 let waitingLogged = false;
 let lastMoveAnnouncement;
+let swapSettingInstalled = false;
+let swapSettingIntegrationErrorLogged = false;
+let dragPreviewErrorLogged = false;
 
 const DEBUG = true;
 function dbg(message) {
@@ -41,6 +52,13 @@ function announceMoveMessage(message) {
     lastMoveAnnouncement = announcement;
 }
 
+function clearMoveAnnouncement() {
+    if (lastMoveAnnouncement != null) {
+        lastMoveAnnouncement.remove();
+        lastMoveAnnouncement = null;
+    }
+}
+
 dbg("Script evaluated. Version " + scriptVersion + ".");
 
 function findTable() {
@@ -63,6 +81,127 @@ function getSelectedCategory(categoryButtons) {
         if (categoryButtons[i].isChecked()) return i;
     }
     return 0;
+}
+
+function addSwapConfirmationSetting() {
+    if (swapSettingInstalled || !global.eui.settings || !global.eui.settings.cont) return;
+
+    const children = global.eui.settings.cont.getChildren();
+    for (let i = 0; i < children.size; i++) {
+        const child = children.get(i);
+        if (typeof child.getWidget !== "function") continue;
+
+        const settingsTable = child.getWidget();
+        if (!settingsTable || typeof settingsTable.checkPref !== "function") continue;
+
+        settingsTable.checkPref(
+            skipSwapConfirmationsSetting,
+            false,
+            value => {
+                skipSwapConfirmations = value;
+                Core.settings.forceSave();
+            }
+        );
+        settingsTable.checkPref(
+            visualDragSetting,
+            true,
+            value => {
+                visualDragEnabled = value;
+                if (!visualDragEnabled) clearVisualDrag();
+                Core.settings.forceSave();
+            }
+        );
+        swapSettingInstalled = true;
+        dbg("Added swap and visual-drag toggles to Extended UI settings.");
+        return;
+    }
+
+    if (!swapSettingIntegrationErrorLogged) {
+        Log.err("[Drag from Scheme Table] Could not find Extended UI's settings table; swap toggle was not added.");
+        swapSettingIntegrationErrorLogged = true;
+    }
+}
+
+function clearVisualDrag() {
+    if (dragPreview != null) {
+        dragPreview.remove();
+        dragPreview = null;
+    }
+    activeDrag = null;
+}
+
+function updateDragPreview(stageX, stageY) {
+    if (dragPreview == null) {
+        const image = activeDrag.button.getImage();
+        const drawable = image == null ? null : image.getDrawable();
+        if (drawable == null) {
+            if (!dragPreviewErrorLogged) {
+                Log.err("[Drag from Scheme Table] Cannot create drag preview: schematic slot has no drawable.");
+                dragPreviewErrorLogged = true;
+            }
+            return;
+        }
+
+        const width = image.getWidth() > 0 ? image.getWidth() : activeDrag.button.getWidth() * 0.6;
+        const height = image.getHeight() > 0 ? image.getHeight() : activeDrag.button.getHeight() * 0.6;
+        dragPreview = new Packages.arc.scene.ui.ImageButton(drawable, Styles.selecti);
+        dragPreview.setChecked(true);
+        dragPreview.touchable = Packages.arc.scene.event.Touchable.disabled;
+        dragPreview.setSize(activeDrag.button.getWidth() * dragPreviewScale,
+            activeDrag.button.getHeight() * dragPreviewScale);
+        dragPreview.resizeImage(width * dragPreviewScale);
+        Core.scene.add(dragPreview);
+        dbg("Created outlined drag preview for " + activeDrag.key + ".");
+    }
+
+    dragPreview.setPosition(stageX, stageY, Align.center);
+    dragPreview.toFront();
+}
+
+function showSwapConfirm(source, destination, expectedDestination) {
+    clearMoveAnnouncement();
+    const dialog = new BaseDialog(Core.bundle.get("drag-scheme-table.swap-title"));
+    let confirmed = false;
+    dialog.setFillParent(false);
+    dialog.cont.add(Core.bundle.get("drag-scheme-table.swap-message"))
+        .width(Vars.mobile ? 400 : 500).wrap().pad(4).get()
+        .setAlignment(Align.center, Align.center);
+    dialog.cont.row();
+
+    const skipCheckbox = new Packages.arc.scene.ui.CheckBox(
+        Core.bundle.get("drag-scheme-table.skip-confirmation")
+    );
+    skipCheckbox.setChecked(skipSwapConfirmations);
+    dialog.cont.add(skipCheckbox).left().pad(4);
+
+    const confirm = () => {
+        if (confirmed) return;
+        confirmed = true;
+        dialog.hide();
+        if (skipCheckbox.isChecked()) {
+            skipSwapConfirmations = true;
+            Core.settings.put(skipSwapConfirmationsSetting, true);
+            Core.settings.forceSave();
+            dbg("Swap confirmation preference saved.");
+        }
+        moveSchematic(source, destination, expectedDestination);
+    };
+
+    dialog.hidden(() => {
+        if (!confirmed) {
+            selectedSlot = null;
+            announceMoveMessage(Core.bundle.get("drag-scheme-table.swap-cancelled"));
+            dbg("Swap confirmation dismissed; cleared selected schematic.");
+        }
+    });
+
+    dialog.buttons.defaults().size(200, 54).pad(2);
+    dialog.buttons.button("@cancel", Icon.cancel, () => dialog.hide());
+    dialog.buttons.button("@ok", Icon.ok, confirm);
+    dialog.keyDown(Packages.arc.input.KeyCode.enter, confirm);
+    dialog.keyDown(Packages.arc.input.KeyCode.escape, () => dialog.hide());
+    dialog.keyDown(Packages.arc.input.KeyCode.back, () => dialog.hide());
+    dialog.show();
 }
 
 function moveSchematic(source, destination, expectedDestination) {
@@ -131,11 +270,11 @@ function selectOrMove(category, index, columns) {
 
     const source = selectedSlot;
     if (value) {
-        Vars.ui.showConfirm(
-            Core.bundle.get("drag-scheme-table.swap-title"),
-            Core.bundle.get("drag-scheme-table.swap-message"),
-            () => moveSchematic(source, key, value)
-        );
+        if (skipSwapConfirmations) {
+            moveSchematic(source, key, value);
+        } else {
+            showSwapConfirm(source, key, value);
+        }
     } else {
         moveSchematic(source, key, "");
     }
@@ -155,6 +294,49 @@ function seqToArray(seq) {
         result.push(seq.get(i));
     }
     return result;
+}
+
+function findDropTarget(stageX, stageY) {
+    let actor = Core.scene.hit(stageX, stageY, true);
+    while (actor != null) {
+        for (let i = 0; i < boundSlotButtons.length; i++) {
+            if (actor === boundSlotButtons[i]) return i;
+        }
+        actor = actor.parent;
+    }
+    return -1;
+}
+
+function finishDrag(drag, stageX, stageY) {
+    const index = findDropTarget(stageX, stageY);
+    if (index < 0) {
+        dbg("Drag ended outside a schematic slot; no changes made.");
+        return;
+    }
+    if (!drag.name) {
+        dbg("Drag ended on slot " + index + " from an empty source; no changes made.");
+        return;
+    }
+
+    const category = getSelectedCategory(boundCategoryButtons);
+    const destination = slotKey(category, index, boundColumns);
+    if (destination === drag.key) {
+        dbg("Drag ended on its source slot; no changes made.");
+        return;
+    }
+
+    selectedSlot = null;
+    const source = { key: drag.key, name: drag.name };
+    const expectedDestination = Core.settings.getString(destination, "");
+    if (expectedDestination) {
+        if (skipSwapConfirmations) {
+            moveSchematic(source, destination, expectedDestination);
+        } else {
+            showSwapConfirm(source, destination, expectedDestination);
+        }
+    } else {
+        moveSchematic(source, destination, "");
+    }
 }
 
 function bindTableButtons(table) {
@@ -187,13 +369,55 @@ function bindTableButtons(table) {
         slotButtons[i].addCaptureListener(new JavaAdapter(Packages.arc.scene.event.InputListener, {
             touchDown: function(event, x, y, pointer, button) {
                 if (!moveMode || button != Packages.arc.input.KeyCode.mouseLeft) return false;
-                dbg("touchDown captured on slot " + index);
+                const category = getSelectedCategory(boundCategoryButtons);
+                const key = slotKey(category, index, boundColumns);
+                activeDrag = {
+                    index: index,
+                    pointer: pointer,
+                    key: key,
+                    name: Core.settings.getString(key, ""),
+                    category: category,
+                    button: slotButtons[index],
+                    startX: event.stageX,
+                    startY: event.stageY,
+                    dragging: false
+                };
                 event.stop();
                 return true;
             },
-            touchUp: function(event, x, y, pointer, button) {
-                if (!moveMode || button != Packages.arc.input.KeyCode.mouseLeft) return;
+            touchDragged: function(event, x, y, pointer) {
+                if (!moveMode || activeDrag == null || activeDrag.pointer !== pointer) return;
                 event.stop();
+
+                const dx = event.stageX - activeDrag.startX;
+                const dy = event.stageY - activeDrag.startY;
+                if (!activeDrag.dragging && dx * dx + dy * dy >= dragThresholdSquared) {
+                    activeDrag.dragging = true;
+                    dbg("Drag started for " + activeDrag.key + ".");
+                }
+                if (activeDrag.dragging && visualDragEnabled && activeDrag.name) {
+                    updateDragPreview(event.stageX, event.stageY);
+                }
+            },
+            touchUp: function(event, x, y, pointer, button) {
+                if (!moveMode || button != Packages.arc.input.KeyCode.mouseLeft ||
+                    activeDrag == null || activeDrag.pointer !== pointer) return;
+                event.stop();
+                const drag = activeDrag;
+                const dx = event.stageX - drag.startX;
+                const dy = event.stageY - drag.startY;
+                const wasDragged = drag.dragging || dx * dx + dy * dy >= dragThresholdSquared;
+                clearVisualDrag();
+                if (wasDragged) {
+                    if (visualDragEnabled) {
+                        finishDrag(drag, event.stageX, event.stageY);
+                    } else {
+                        dbg("Drag-and-drop is disabled; use click-to-select and click-to-move.");
+                    }
+                    return;
+                }
+                if (x < 0 || y < 0 ||
+                    x > slotButtons[index].getWidth() || y > slotButtons[index].getHeight()) return;
                 selectOrMove(getSelectedCategory(boundCategoryButtons), index, boundColumns);
             }
         }));
@@ -220,6 +444,7 @@ function createMoveControl() {
     moveButton = moveControl.button("MOVE", Styles.defaultt, () => {
         moveMode = !moveMode;
         selectedSlot = null;
+        clearVisualDrag();
         dbg("Move mode " + (moveMode ? "ON" : "OFF"));
         announceMoveMessage(Core.bundle.get(moveMode
             ? "drag-scheme-table.mode-enabled"
@@ -255,10 +480,18 @@ Events.on(ClientLoadEvent, () => {
         createMoveControl();
         Log.info("[Drag from Scheme Table] Loaded v" + scriptVersion + ".");
 
+        skipSwapConfirmations = Core.settings.getBool(skipSwapConfirmationsSetting, false);
+        dbg("Swap confirmation preference " + (skipSwapConfirmations ? "loaded as disabled." : "enabled."));
+        visualDragEnabled = Core.settings.getBool(visualDragSetting, true);
+        dbg("Visual drag " + (visualDragEnabled ? "enabled." : "disabled."));
+
         global.eui.registerUpdate(() => {
             try {
+                addSwapConfirmationSetting();
+
                 const table = findTable();
                 if (!Core.settings.getBool("eui-ShowSchematicsTable", true)) {
+                    clearVisualDrag();
                     selectedSlot = null;
                     moveMode = false;
                     return;
