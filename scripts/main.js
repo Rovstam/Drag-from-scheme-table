@@ -78,18 +78,29 @@ function moveSchematic(source, destination, expectedDestination) {
     const sourceImageKey = source.key + "image";
     const destinationImageKey = destination + "image";
     const sourceImage = Core.settings.getString(sourceImageKey, "");
+    const destinationImage = Core.settings.getString(destinationImageKey, "");
 
     Core.settings.put(destination, currentSource);
-    Core.settings.remove(source.key);
-    Core.settings.remove(destinationImageKey);
+    if (currentDestination) {
+        Core.settings.put(source.key, currentDestination);
+    } else {
+        Core.settings.remove(source.key);
+    }
+
     Core.settings.remove(sourceImageKey);
+    Core.settings.remove(destinationImageKey);
     if (sourceImage) {
         Core.settings.put(destinationImageKey, sourceImage);
     }
+    if (currentDestination && destinationImage) {
+        Core.settings.put(sourceImageKey, destinationImage);
+    }
 
     selectedSlot = null;
-    announceMoveMessage(Core.bundle.get("drag-scheme-table.move-complete"));
-    dbg("Moved " + source.key + " -> " + destination);
+    announceMoveMessage(Core.bundle.get(currentDestination
+        ? "drag-scheme-table.swap-complete"
+        : "drag-scheme-table.move-complete"));
+    dbg((currentDestination ? "Swapped " : "Moved ") + source.key + " <-> " + destination);
     if (global.eui.schematicsTableUI && global.eui.schematicsTableUI.rebuildTable) {
         global.eui.schematicsTableUI.rebuildTable();
     } else {
@@ -121,8 +132,8 @@ function selectOrMove(category, index, columns) {
     const source = selectedSlot;
     if (value) {
         Vars.ui.showConfirm(
-            Core.bundle.get("drag-scheme-table.replace-title"),
-            Core.bundle.get("drag-scheme-table.replace-message"),
+            Core.bundle.get("drag-scheme-table.swap-title"),
+            Core.bundle.get("drag-scheme-table.swap-message"),
             () => moveSchematic(source, key, value)
         );
     } else {
