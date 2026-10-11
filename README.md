@@ -8,7 +8,11 @@ This script mod adds schematic rearranging to Salivion's Extended UI schematic t
 <img width="428" height="443" alt="image" src="https://github.com/user-attachments/assets/1e44d543-91a8-4875-bbaf-6d93f63e6adb" />
 
 2. Click a populated slot, then click the destination slot.
-https://github.com/user-attachments/assets/3d725d9b-3f1e-4fe6-b934-eb0cbfce090d
+
+
+https://github.com/user-attachments/assets/3ab606bc-a216-4b56-b3a4-97b2b77aa0e8
+
+
 
 3. If the destination is occupied, confirm the swap in the popup.
 4. Click **MOVE** again to return to normal schematic-use behavior.
