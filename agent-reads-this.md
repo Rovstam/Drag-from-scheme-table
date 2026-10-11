@@ -78,5 +78,5 @@ The user has confirmed functional success, so treat runtime functionality as wor
 
 - Prior development checks: `node --check scripts\main.js`; mock interaction coverage for direct slot capture, category pass-through, selection, cross-category replacement confirmation, custom-image transfer, source clearing, rebuild/rebinding, and normal-mode pass-through.
 - Mock tests are useful but not a replacement for in-game verification.
-- Only modify files in this project folder. Keep package ZIP synchronized with source after changes.
+- Only modify files in this project folder. Keep package ZIP synchronized with source after changes. Do not create zip files of this mod.
 - Do not change the version from 1.0.1.
