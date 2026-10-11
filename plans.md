@@ -1,4 +1,6 @@
-Follow-up — Preview outline: The current `Styles.selecti` outline is acceptable for now, but is provisional. Refine its appearance toward the user's intended outline when they provide or request the next visual adjustment.
+Follow-up — Preview outline: The current `Styles.selecti` outline is acceptable for now, but is provisional. Refine its appearance toward the user's intended outline only when they provide or request the next visual adjustment.
+
+Versioning: Keep `mod.hjson` and `scripts/main.js` at version 1.0.1. Never change either version unless the user explicitly asks.
 
 ------------------
 
