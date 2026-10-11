@@ -5,7 +5,7 @@ const columnsSetting = "eui-SchematicsTableColumns";
 const tableName = "eui-schematics-table";
 const skipSwapConfirmationsSetting = "drag-scheme-table.skip-swap-confirmations";
 const visualDragSetting = "drag-scheme-table.visual-drag";
-const scriptVersion = "1.0.3";
+const scriptVersion = "1.0.1";
 const dragThresholdSquared = 64;
 const dragPreviewScale = 1.35;
 

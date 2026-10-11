@@ -20,7 +20,7 @@ The user explicitly says: **edit only files inside this mod folder**. Mindustry 
 - Main script: `scripts\main.js`
 - Manifest: `mod.hjson`
 - Strings: `bundles\bundle.properties`
-- The user's firm version preference: keep `version` at **1.0.1**. Do not bump version numbers for future fixes unless the user specifically asks.
+- **Never change the mod version unless the user explicitly asks.** Keep `mod.hjson` `version` and `scripts/main.js` `scriptVersion` at **1.0.1** until then. Do not bump it for fixes, features, or releases without explicit permission.
 - Local Mindustry source reference: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\Mindustry-160.5`
 - Old `last_log.txt` inspected during earlier work was dated 2026-07-06, reported Mindustry 158.1, and did not list this mod. It is not evidence about a later launch. Do not ask for logs as the default response to a user who already says the mod loads/works; investigate code directly first.
 
@@ -31,7 +31,7 @@ The user explicitly says: **edit only files inside this mod folder**. Mindustry 
 - Script mod, main `scripts/main`
 - Required dependency: `extended-ui`
 - `minGameVersion`: `158.1`
-- `version`: `1.0.1` (keep fixed)
+- `version`: `1.0.1` (never change without explicit user permission)
 
 ## Verified Extended UI integration
 
@@ -58,6 +58,7 @@ Reference is the user's `saves\mods\salivionextended-ui.zip`, internal mod name 
 - Replacing an occupied destination is done only in the confirm callback. The operation checks that source and destination settings have not changed, transfers custom image settings, clears the source, and calls EUI's exported rebuild function.
 - The Extended UI setting **Enable visual schematic dragging** controls the drag gesture: when enabled, dragging onto a slot moves or swaps with confirmation as needed and shows an outlined preview; when disabled, drag gestures do nothing and click-to-select/click-to-move remains available.
 - The current preview outline uses `Styles.selecti`. The user likes it for now but wants its appearance treated as provisional and adjusted toward their intended outline in a future change.
+- Drag-and-drop should remain enabled only when **Enable visual schematic dragging** is on. Disabling it blocks drag gestures while preserving click-to-select/click-to-move.
 - EUI update callbacks can swallow errors in its central loop; retain the add-on's prefixed `Log.err` handling and DEBUG stage logs while the user is still validating behavior.
 - The working direct-slot-listener approach replaced an earlier table-level coordinate hit-test. Do not revert to table-parent coordinate hit testing without a specific reason.
 
