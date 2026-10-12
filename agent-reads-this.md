@@ -2,84 +2,137 @@
 
 ## User request and hard scope
 
-This Mindustry Rhino JavaScript script mod extends Salivion's Extended UI schematic table. The user has confirmed the mod **functionally works**.
+This Mindustry mod extends Salivion's Extended UI schematic table. The user confirmed the existing table-to-table feature works. The user now wants to investigate adding a Java implementation for dragging schematics from the vanilla library into the EUI table.
 
-Requested behavior:
-- A visible **MOVE** toggle above the EUI schematic table enables move mode.
-- In move mode, clicking a populated slot selects it and highlights it; clicking another slot moves the schematic there.
-- If the destination is occupied, ask for confirmation before changing either slot. Cancel must leave both unchanged.
-- Transfer the source slot's custom image setting with the schematic and clear the source slot.
-- Category tabs stay clickable while a source is selected; cross-category moves are supported.
-- Outside move mode, existing schematic-table behavior is unchanged.
-
-The user explicitly says: **edit only files inside this mod folder**. Mindustry source may be read as reference, but do not modify it. Do not edit Extended UI or any other mod.
+Hard constraints:
+- Edit only files inside this mod folder.
+- Mindustry source may be read as a reference, but never modify it.
+- Do not edit Extended UI or any other mod.
+- Do not replace, rewrite, or patch the base-game schematic dialog.
+- Preserve existing table-to-table behavior.
+- Never change the version from `1.0.1` without explicit user permission.
+- When planning, distinguish source-confirmed facts from unverified runtime behavior. Do not claim the new Java/library feature works until built and tested.
 
 ## Project paths and packaging
 
 - Editable folder: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\saves\mods\Drag from scheme table`
-- Main script: `scripts\main.js`
+- Existing table script: `scripts\main.js`
 - Manifest: `mod.hjson`
 - Strings: `bundles\bundle.properties`
-- **Never change the mod version unless the user explicitly asks.** Keep `mod.hjson` `version` and `scripts/main.js` `scriptVersion` at **1.0.1** until then. Do not bump it for fixes, features, or releases without explicit permission.
+- Existing manifest version and script version: `1.0.1`.
 - Local Mindustry source reference: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\Mindustry-160.5`
-- Old `last_log.txt` inspected during earlier work was dated 2026-07-06, reported Mindustry 158.1, and did not list this mod. It is not evidence about a later launch. Do not ask for logs as the default response to a user who already says the mod loads/works; investigate code directly first.
+- Suggested local mod: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\saves\mods\zipextract\SchematicParse-4.6.0`
 
-## Current manifest
+## Existing feature behavior to preserve
 
-- Internal name: `drag-scheme-table`
-- Display name: `Drag from Scheme Table`
-- Script mod, main `scripts/main`
-- Required dependency: `extended-ui`
-- `minGameVersion`: `158.1`
-- `version`: `1.0.1` (never change without explicit user permission)
+- A separate **MOVE** toggle enables table move mode.
+- In move mode, clicking a populated slot selects/highlights it; clicking another slot moves the schematic.
+- Cross-category moves are supported; category buttons remain clickable.
+- Occupied destinations use confirmation. Cancellation must not change either slot.
+- A move transfers the source slot's custom image setting, clears the source, and requests an EUI table rebuild.
+- Outside move mode, existing EUI behavior remains unchanged.
+- **Enable visual schematic dragging** enables drag/drop between table slots, with an outlined preview; off disables drag gestures while click-to-select/click-to-move remains available.
+- `Styles.selecti` preview outline is acceptable but provisional.
+
+## Current manifest problem — resolve before Java feature implementation
+
+The current `mod.hjson` declares:
+- `java: true`
+- `script: false`
+- `main: "scripts/main"`
+
+The project currently has no Java source tree or Gradle build configuration, and the only entry-point code is `scripts/main.js`. Mindustry's Java mod loader interprets `main` as a fully qualified Java class name when Java loading is enabled. `scripts/main` is not such a class. A manifest toggle does not convert JavaScript into Java, so this configuration cannot load a Java entry point as intended.
+
+Before implementing Java UI work:
+1. Add Java sources, build configuration, and a `mindustry.mod.Mod` subclass.
+2. Point `main` at that class's fully qualified name.
+3. Retain and package `scripts/main.js`; verify the engine loads the script alongside the Java mod.
+4. Keep version `1.0.1`.
+
+## Mindustry and SchematicParse source findings
+
+Inspected local Mindustry 160.5 source:
+- `core/src/mindustry/ui/dialogs/SchematicsDialog.java`
+- `core/src/mindustry/ui/dialogs/BaseDialog.java`
+- `core/src/mindustry/game/Schematic.java`
+- `core/src/mindustry/mod/Mods.java`
+- `core/src/mindustry/mod/Mod.java`
+
+Findings:
+- The vanilla schematic library is `ui.schematics`, a `SchematicsDialog` extending `BaseDialog`.
+- `SchematicsDialog.setup()` constructs library cards dynamically; filter/search changes rebuild the card actors.
+- Each card contains a `SchematicsDialog.SchematicImage`. The image's `schematic` field is private in the inspected version.
+- The dialog is modal, but its widgets are normal scene actors. A Java mod can investigate/extend the existing dialog; replacing it is not established as necessary and is out of scope.
+- Existing library behavior includes card click to use schematic (during game), info in menu, and child controls for info/export/edit/delete or workshop. Any new listener must preserve these.
+- `Schematic.labels` is a `Seq<String>`. Do not expect typed/non-string tags.
+
+Suggested local SchematicParse 4.6.0:
+- Its manifest uses `main: "sp.SchematicParse"` and `java: true`.
+- Its Java class extends `Mod`, adds buttons to `ui.schematics`, and reflects private fields including the dialog's info field.
+- It modifies the existing vanilla dialog rather than replacing it.
+- It adds no library-card drag behavior. Its build targets Mindustry 154.2, so it is a pattern, not a version-matched dependency or guaranteed compatible implementation.
+
+Version caution:
+- This mod declares `minGameVersion: 158.1`, but the local source inspected is Mindustry 160.5. Confirm target/runtime version and APIs before coding compatibility-sensitive behavior.
+
+## Proposed Feature 3: library-to-table drag
+
+Treat this as a staged prototype, not a confirmed working feature:
+
+1. Repair Java entry point/build setup.
+2. Locate live schematic card buttons/images from `ui.schematics`; associate each with its `Schematic`. Rebind whenever the dialog rebuilds cards. Isolate and log any reflection failure needed to access the private schematic field.
+3. Prototype distinguishing ordinary click from long-press/drag while preserving ordinary click and child buttons.
+4. On drag start, hide the modal library dialog and show a pointer-following preview.
+5. Confirm pointer/touch movement and release still arrive after hiding the dialog. Matching Arc touch-focus behavior was not locally verified; test desktop and mobile. If input tracking fails, stop and choose another supported design; do not replace the vanilla dialog.
+6. Bridge the library schematic from Java to existing table logic using a clear event/shared-state boundary.
+7. Keep the existing direct slot-button listener pattern in `scripts/main.js`. Implement a separate library insertion operation; existing table move logic requires a populated source slot and is not reusable unchanged.
+8. Resolve a live destination slot. Empty slot inserts; occupied slot asks confirmation, with cancel leaving it untouched. Handle dialog restoration/cancel cleanly.
+9. Verify EUI destination storage, custom image semantics, and rebuild API against the actual installed Extended UI source before changing settings.
+
+### Icon-tag plan
+
+- Labels are strings. Recognize supported icon labels from encoded string forms, not runtime types.
+- SchematicParse's local source uses icon-code strings and content emoji strings for icon tags; verify exact supported encoding against target game before use.
+- One recognized icon tag: use for temporary preview and table icon only if the EUI slot format supports it.
+- Multiple recognized icons: ask the user to choose.
+- Define fallback when no recognized icon tag exists. Emoji rendering may be deferred.
+- Do not write arbitrary labels into EUI image settings without confirming the expected format.
+
+### Rename
+
+The earlier requested display name is "Schematic table QoL". Confirm whether this means display name only or internal mod identity too. If internal name changes, preserve/migrate `drag-scheme-table.*` settings. Keep the EUI dependency ID `extended-ui`.
 
 ## Verified Extended UI integration
 
-Reference is the user's `saves\mods\salivionextended-ui.zip`, internal mod name `extended-ui`, particularly `scripts/ui/other/schematics-table-ui.js`.
-
-- Global update integration: `global.eui.registerUpdate(fn)`.
-- Rebuild API: `global.eui.schematicsTableUI.rebuildTable()`.
+Prior local reference was the user's `saves\mods\salivionextended-ui.zip`, internal mod name `extended-ui`, particularly `scripts/ui/other/schematics-table-ui.js`:
+- Update integration: `global.eui.registerUpdate(fn)`.
+- Rebuild: `global.eui.schematicsTableUI.rebuildTable()`.
 - HUD table name: `eui-schematics-table`.
-- EUI destroys/recreates the table on rebuild; slot-button objects are replaced. The add-on compares object identities and binds each new set.
-- Table structure: outer table -> wrapped child table -> category-button table at child index 0, category label at index 1, schematic-button table at index 2.
-- Category count equals configured `eui-SchematicsTableColumns`; slot count is `eui-SchematicsTableRows * eui-SchematicsTableColumns`. Default grid: 4 rows by 5 columns.
-- EUI puts its table at the back of the HUD group; keep the separate MOVE control brought to front while the table is visible.
-- Slot key format: `schematic<category>.<column>.<row>`. Custom image key is the slot key plus `image`.
-- Normal slot action calls `Vars.control.input.useSchematic(schematic)`.
-- Desktop right-click opens EUI slot editing; mobile uses its existing double-tap behavior.
+- EUI rebuild destroys/recreates the table and slot buttons.
+- Structure: outer table -> wrapped child table -> categories at child index 0, category label at index 1, schematic slots at child index 2.
+- Slot key: `schematic<category>.<column>.<row>`; custom image key is slot key plus `image`.
+- Normal slot use calls `Vars.control.input.useSchematic(schematic)`.
+- Desktop right-click editing and mobile double-tap behavior belong to EUI and must remain intact.
 
-## Working implementation in `scripts/main.js`
+The installed Extended UI source was not inspected in the most recent Feature 3 planning review. Re-verify APIs, settings format, and dependency version before adding library insertion/icon writes.
 
-- `ClientLoadEvent` checks for `global.eui.registerUpdate`, creates a separate text button labeled **MOVE** (`Styles.defaultt`), and registers the update callback.
-- The pencil icon seen on empty EUI slots is not a reliable move-mode indicator; keep the clear text label unless user requests otherwise.
-- The update callback finds `eui-schematics-table`, reads the actual EUI layout, verifies category/slot counts, and attaches a capture `InputListener` directly to each schematic slot button.
-- Category buttons receive no listener from this mod. In move mode, left-button touch-down on a slot is consumed and touch-up selects/moves that slot. With move mode disabled, the listener returns false, allowing EUI's ordinary click behavior to run.
-- A selected source is represented by `{key, name}` and the selected slot is highlighted. Category selection is resolved from the live category buttons when the next slot is clicked, supporting cross-category moves.
-- Replacing an occupied destination is done only in the confirm callback. The operation checks that source and destination settings have not changed, transfers custom image settings, clears the source, and calls EUI's exported rebuild function.
-- The Extended UI setting **Enable visual schematic dragging** controls the drag gesture: when enabled, dragging onto a slot moves or swaps with confirmation as needed and shows an outlined preview; when disabled, drag gestures do nothing and click-to-select/click-to-move remains available.
-- The current preview outline uses `Styles.selecti`. The user likes it for now but wants its appearance treated as provisional and adjusted toward their intended outline in a future change.
-- Drag-and-drop should remain enabled only when **Enable visual schematic dragging** is on. Disabling it blocks drag gestures while preserving click-to-select/click-to-move.
-- EUI update callbacks can swallow errors in its central loop; retain the add-on's prefixed `Log.err` handling and DEBUG stage logs while the user is still validating behavior.
-- The working direct-slot-listener approach replaced an earlier table-level coordinate hit-test. Do not revert to table-parent coordinate hit testing without a specific reason.
+## Existing script implementation notes
 
-## Debugging notes
+- `scripts/main.js` uses direct capture `InputListener`s on live table slot buttons; do not revert to table-parent coordinate hit testing without a specific reason.
+- It rebinds when EUI replaces slot buttons by comparing object identities.
+- It uses live category state to support cross-category moves.
+- Stale source/destination settings are checked before writing.
+- The current script is already in the folder and should remain part of a Java-enabled package unless an explicit migration decision says otherwise.
+- Keep prefixed error reporting and avoid silent callback failures.
 
-Useful current script log messages are prefixed `[Drag from Scheme Table]`, including:
-- `Script evaluated. Version 1.0.1.`
-- `ClientLoadEvent received.`
-- `Loaded v1.0.1.`
-- `Bound N schematic slots.`
-- `Move mode ON` / `Move mode OFF`
-- `touchDown captured on slot N`
-- `Slot click: schematic...`
-- `Moved schematic... -> schematic...`
-- `UI update failed: ...` or `Client load setup failed: ...`
+## Validation requirements
 
-The user has confirmed functional success, so treat runtime functionality as working. If a future regression is reported, fix the current code directly and use logs/source as helpful evidence; do not imply the user has not tested it.
+Prior checks for the existing script included `node --check scripts\main.js` and mock interaction coverage for slot capture, selection, category pass-through, cross-category confirmation, image transfer, source clearing, rebuild/rebinding, and normal-mode pass-through. Preserve these existing checks where available.
 
-## Validation and future edits
-
-- Prior development checks: `node --check scripts\main.js`; mock interaction coverage for direct slot capture, category pass-through, selection, cross-category replacement confirmation, custom-image transfer, source clearing, rebuild/rebinding, and normal-mode pass-through.
-- Mock tests are useful but not a replacement for in-game verification.
-- Only modify files in this project folder. Keep package ZIP synchronized with source after changes. Do not create zip files of this mod.
-- Do not change the version from 1.0.1.
+For the Java/library feature:
+- No build or in-game test has been performed as part of the source review.
+- Matching Arc source/touch-focus behavior is not locally verified.
+- Mindustry 158.1 compatibility is not established by the 160.5 source review.
+- Verify Java and script load from the final package.
+- Test normal clicks, long press, dialog/filter rebuilds, release after hide, empty/occupied destinations, cancel, categories, icon cases, desktop/mobile, and regression of existing table moves.
+- Never claim runtime success before in-game verification.
