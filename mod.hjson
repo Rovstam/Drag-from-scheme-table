@@ -8,6 +8,6 @@
     "dependencies": ["extended-ui"],
     "main": "scripts/main",
     "hidden": true,
-    "java": true,
-    "script": false
+    "java": false,
+    "script": true
 }
