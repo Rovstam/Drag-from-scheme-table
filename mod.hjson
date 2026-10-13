@@ -2,7 +2,7 @@
     "name": "drag-scheme-table",
     "displayName": "Drag from Scheme Table",
     "author": "Rovstam",
-    "description": "Move schematics between slots in the Extended UI Schematics table.",
+    "description": "Move schematics between table slots and drag them from the library into the Extended UI table.",
     "version": "1.0.1",
     "minGameVersion": "158.1",
     "dependencies": ["extended-ui"],
