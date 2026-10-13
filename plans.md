@@ -6,7 +6,8 @@
 - Preserve the working table-to-table schematic move behavior, including the MOVE toggle, selection, highlighting, cross-category support, swap confirmation, custom-image transfer, and Extended UI rebuild integration.
 - Keep the user workflow to installing one mod package and using it. Prefer script-only; if Java ever becomes necessary, package it inside the same mod archive rather than requiring a separate JAR install.
 - Never modify or replace the base-game schematic dialog or any other mod. Attach to its live UI actors and preserve ordinary behavior.
-- Keep `mod.hjson` and the script version at `1.0.1` unless the user explicitly asks to change the version.
+- The current mod identity is **Schematic table QoL**, version `1.0.2`.
+- Keep existing `drag-scheme-table.*` preference keys and `[Drag from Scheme Table]` log labels unchanged.
 - Keep all project edits inside this mod folder. Do not modify Mindustry, Extended UI, or any other mod.
 
 ## Implemented features
@@ -21,7 +22,7 @@ With **Enable visual schematic dragging** enabled, dragging a schematic onto an 
 
 ### Dragging from the schematic library
 
-Implemented in `scripts/main.js`: the script scans the live schematic dialog for card images, attaches a capture listener to each card without replacing base-game UI, and starts a drag after a stationary 0.4-second hold. It hides the library, follows the pointer with a schematic preview, resolves a live EUI slot, and inserts or confirms replacement. The table's stored custom image remains attached to its slot. The implementation is not runtime-verified yet; desktop/mobile pointer tracking after hiding the modal dialog must be tested in-game.
+Implemented in `scripts/main.js`: the script scans the live schematic dialog for card images, attaches a capture listener to each card without replacing base-game UI, and starts a drag after a stationary 0.4-second hold. It hides the library, follows the pointer with a schematic preview, resolves a live EUI slot, and inserts or confirms replacement. The table's stored custom image remains attached to its slot. The user confirmed this feature works in game.
 
 ## Packaging
 

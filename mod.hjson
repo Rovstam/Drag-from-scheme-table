@@ -1,9 +1,9 @@
 {
-    "name": "drag-scheme-table",
-    "displayName": "Drag from Scheme Table",
+    "name": "Schematic table QoL",
+    "displayName": "Schematic table QoL",
     "author": "Rovstam",
     "description": "Move schematics between table slots and drag them from the library into the Extended UI table.",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "minGameVersion": "158.1",
     "dependencies": ["extended-ui"],
     "main": "scripts/main",

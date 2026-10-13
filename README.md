@@ -1,6 +1,11 @@
-# Drag from Scheme Table
+# Schematic table QoL
 
 This script mod adds schematic rearranging to Salivion's Extended UI schematic table.
+
+## Version 1.0.2
+
+- Renamed the mod to **Schematic table QoL**.
+- Kept the existing `drag-scheme-table.*` preference keys and `[Drag from Scheme Table]` log label unchanged.
 
 ## Use
 
