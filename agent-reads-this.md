@@ -5,8 +5,9 @@
 This Mindustry script mod extends Salivion's Extended UI schematic table. The user wants users to install one mod and use it, with no separate JAR installation or code/build steps. Prefer a script-only implementation; never modify the base game or another mod.
 
 - Keep delivery to one installable mod package. If a future technical blocker genuinely requires Java, package the compiled class inside the same mod archive; never ask users to install a separate JAR or inspect code.
-- Library-to-table dragging is being implemented in the existing script, without patching/replacing the base-game dialog. Preserve its ordinary actions and child controls.
-- Preserve the existing table-to-table behavior and keep version `1.0.1` unless the user explicitly authorizes a version change.
+- Library-to-table dragging is implemented in the existing script, without patching/replacing the base-game dialog; the user confirmed it works in game. Preserve the base-game dialog's ordinary actions and child controls.
+- The mod identity is **Schematic table QoL** and its current version is `1.0.2`.
+- Preserve existing `drag-scheme-table.*` preference keys and `[Drag from Scheme Table]` diagnostics; these are intentionally not renamed with the mod.
 - Edit only this mod folder. Mindustry source may be read as reference, but do not modify Mindustry, Extended UI, or another mod.
 - Distinguish source-confirmed facts from unverified runtime behavior.
 
@@ -18,7 +19,7 @@ This Mindustry script mod extends Salivion's Extended UI schematic table. The us
 - The manifest is script-only: `main: "scripts/main"`, `java: false`, and `script: true`.
 - There is no Java source tree or Gradle build setup in the active project.
 - `JavaAdapter` in the JavaScript source is Rhino interop for implementing Arc listener interfaces. It does not require a project JAR.
-- Preserve the mod version `1.0.1` and the `extended-ui` dependency.
+- Preserve the `extended-ui` dependency.
 
 ## Existing feature behavior to preserve
 
