@@ -1,36 +1,31 @@
-# Drag from Scheme Table — Project Status
+# Schematic table QoL — Current Work Plan
 
-## Current scope
+## Active goal
 
-- Keep this mod as a Mindustry script mod; users should not need to build or install a JAR.
-- Preserve the working table-to-table schematic move behavior, including the MOVE toggle, selection, highlighting, cross-category support, swap confirmation, custom-image transfer, and Extended UI rebuild integration.
-- Keep the user workflow to installing one mod package and using it. Prefer script-only; if Java ever becomes necessary, package it inside the same mod archive rather than requiring a separate JAR install.
-- Never modify or replace the base-game schematic dialog or any other mod. Attach to its live UI actors and preserve ordinary behavior.
-- The current mod identity is **Schematic table QoL**, version `1.0.2`.
-- Keep existing `drag-scheme-table.*` preference keys and `[Drag from Scheme Table]` log labels unchanged.
-- Keep all project edits inside this mod folder. Do not modify Mindustry, Extended UI, or any other mod.
+Reduce lag in the vanilla schematic library while retaining the library-to-Extended-UI-table drag feature. Preserve all existing table-to-table MOVE functionality.
 
-## Implemented features
+## Changes currently in `scripts/main.js`
 
-### Swap confirmation preference
+- Removed the recurring 200 ms recursive scan of the vanilla schematic dialog and per-card listener registration.
+- Replaced discovery with one non-consuming capture listener on the vanilla schematic dialog. On press, it hit-tests the current pointer once and resolves the containing schematic-card button/image.
+- Keep pointer polling only while a press is being considered as a drag; remove the updater on release or cancellation.
+- The card hit-test correction is syntax-checked but not yet confirmed in-game.
 
-The confirmation popup offers a persistent "Don't show this again" preference, also configurable in Extended UI settings.
+## In-game verification checklist
 
-### Dragging while moving
+1. Open the vanilla schematic library while the EUI schematic table is enabled. Confirm browsing no longer causes the prior lag.
+2. Click a schematic normally; it must still be used as vanilla behavior dictates.
+3. Use nested info, export, edit, and delete/workshop controls; none should start a drag.
+4. Hold the card without moving for about 0.4 seconds; confirm the preview appears and the library hides only once drag begins.
+5. Drop onto an empty slot; confirm insertion and table refresh.
+6. Drop onto an occupied slot; confirm the replacement prompt, then test accept and cancel.
+7. Cancel by moving beyond the movement threshold before the hold completes, or release outside the table; confirm no insertion.
+8. Search/filter the library and repeat the drag to ensure current card actors are recognized after the vanilla UI rebuilds.
+9. Re-test table-to-table click moves, visual drag, cross-category moves, swap cancellation, and custom-image preservation.
 
-With **Enable visual schematic dragging** enabled, dragging a schematic onto an empty slot moves it; dropping on an occupied slot uses the existing confirmation flow. Releasing outside a slot does nothing. With the setting disabled, drag gestures do nothing and click-to-select/click-to-move remains available.
+## Constraints
 
-### Dragging from the schematic library
-
-Implemented in `scripts/main.js`: the script scans the live schematic dialog for card images, attaches a capture listener to each card without replacing base-game UI, and starts a drag after a stationary 0.4-second hold. It hides the library, follows the pointer with a schematic preview, resolves a live EUI slot, and inserts or confirms replacement. The table's stored custom image remains attached to its slot. The user confirmed this feature works in game.
-
-## Packaging
-
-The active manifest is script-only: `main: "scripts/main"`, `java: false`, and `script: true`. `scripts/main.js` is the entry point. Do not add a Java build or JAR installation step.
-
-The JavaScript's use of Rhino `JavaAdapter` to implement Arc input listeners is normal script-mod interop and does not make the project a Java/JAR mod.
-
-## Validation
-
-- Run script syntax checks, such as `node --check scripts\main.js`, and focused tests when available.
-- In-game verification is still necessary for UI behavior. Report clearly which checks were run and do not claim runtime success without testing in Mindustry.
+- Keep `mod.hjson` and the script mod packaging model unchanged unless the user explicitly asks otherwise.
+- Do not modify Mindustry, Arc, Extended UI, or any other mod.
+- Do not restore periodic full-dialog scanning as a workaround; diagnose press-time actor/card discovery if needed.
+- Report syntax checks separately from in-game/runtime verification.
