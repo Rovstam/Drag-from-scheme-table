@@ -2,10 +2,10 @@
 
 This script mod adds schematic rearranging to Salivion's Extended UI schematic table.
 
-## Version 1.0.2
+## Version 1.0.3
 
-- Renamed the mod to **Schematic table QoL**.
-- Kept the existing `drag-scheme-table.*` preference keys and `[Drag from Scheme Table]` log label unchanged.
+- Fixed library-card press detection so the library-to-table drag feature works.
+- Known issue: using the vanilla schematic library can cause a severe performance hit. A focused optimization is still needed; existing table MOVE and swap behavior is unaffected.
 
 ## Use
 
@@ -31,6 +31,8 @@ The selected slot is highlighted. You can switch category tabs while a slot is s
 ## Insert from the schematic library
 
 While in a game with the Extended UI schematic table enabled, press and hold a schematic card in the library without moving for about 0.4 seconds. When the library closes and its preview follows the pointer, drag it onto a table slot. Empty slots receive the schematic; occupied slots ask for confirmation. Releasing outside a table slot leaves the table unchanged. The library's ordinary click, info, export, edit, and delete actions are left available.
+
+**Performance note:** The library-drag feature currently causes a severe performance hit in the vanilla schematic library. This is a known issue and is the next optimization goal. The table MOVE and swap features continue to work normally.
 
 **Enable visual schematic dragging** in **Settings > Extended UI** controls both table-to-table dragging and library insertion. When disabled, table click-to-select/click-to-move continues to work.
 

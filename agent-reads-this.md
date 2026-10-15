@@ -1,64 +1,54 @@
-# Drag from Scheme Table — Agent Context
+# Schematic table QoL — Agent Context
 
-## Current decision and scope
+## Scope and constraints
 
-This Mindustry script mod extends Salivion's Extended UI schematic table. The user wants users to install one mod and use it, with no separate JAR installation or code/build steps. Prefer a script-only implementation; never modify the base game or another mod.
-
-- Keep delivery to one installable mod package. If a future technical blocker genuinely requires Java, package the compiled class inside the same mod archive; never ask users to install a separate JAR or inspect code.
-- Library-to-table dragging is implemented in the existing script, without patching/replacing the base-game dialog; the user confirmed it works in game. Preserve the base-game dialog's ordinary actions and child controls.
-- The mod identity is **Schematic table QoL** and its current version is `1.0.2`.
-- Preserve existing `drag-scheme-table.*` preference keys and `[Drag from Scheme Table]` diagnostics; these are intentionally not renamed with the mod.
-- Edit only this mod folder. Mindustry source may be read as reference, but do not modify Mindustry, Extended UI, or another mod.
-- Distinguish source-confirmed facts from unverified runtime behavior.
+- This is a script-only Mindustry mod extending Salivion's Extended UI schematic table. Keep the install workflow to one mod package; do not add a Java build or separate JAR requirement.
+- Preserve the existing table-to-table move behavior, settings keys, and `[Drag from Scheme Table]` log prefix.
+- Do not modify Mindustry, Extended UI, or any other mod. Mindustry and Arc source may be read as references.
+- Distinguish source-confirmed behavior from runtime behavior that has not been tested.
 
 ## Project structure
 
-- Runtime entry point: `scripts/main.js`
-- Manifest: `mod.hjson`
-- Strings: `bundles/bundle.properties`
-- The manifest is script-only: `main: "scripts/main"`, `java: false`, and `script: true`.
-- There is no Java source tree or Gradle build setup in the active project.
-- `JavaAdapter` in the JavaScript source is Rhino interop for implementing Arc listener interfaces. It does not require a project JAR.
-- Preserve the `extended-ui` dependency.
+- Entry point: `scripts/main.js`
+- Manifest: `mod.hjson`, currently version `1.0.2`, `java: false`, `script: true`, dependency `extended-ui`.
+- `JavaAdapter` in `main.js` is Rhino interop for Arc listeners and does not imply a Java build.
 
-## Existing feature behavior to preserve
+## Existing functionality to preserve
 
-- A separate **MOVE** toggle enables table move mode.
-- In move mode, clicking a populated slot selects/highlights it; clicking another slot moves the schematic.
-- Cross-category moves are supported; category buttons remain clickable.
-- Occupied destinations use confirmation. Cancellation must not change either slot.
-- A move transfers the source slot's custom image setting, clears the source, and requests an EUI table rebuild.
-- Outside move mode, existing EUI behavior remains unchanged.
-- **Enable visual schematic dragging** enables drag/drop between table slots, with an outlined preview; off disables drag gestures while click-to-select/click-to-move remains available.
-- Long-pressing a schematic library card for about 0.4 seconds starts a preview drag into the EUI table. Ordinary clicks and nested info/export/edit/delete buttons must continue to work.
-- Keep prefixed error reporting and avoid silent callback failures.
+- MOVE mode selects/highlights a populated table slot, then moves it to another slot; cross-category moves are supported.
+- Occupied destinations use confirmation; cancellation leaves the slots unchanged.
+- Moves transfer the source slot's custom image setting, clear the source as appropriate, and rebuild the EUI table.
+- Visual table-to-table dragging can be disabled while click-to-select/click-to-move remains available.
+- The vanilla-library-to-table feature uses a stationary hold of about 0.4 seconds, then shows a pointer-following preview. Empty destinations insert; occupied destinations ask for confirmation; drops outside the table do nothing.
+- Preserve normal vanilla schematic-card clicks and nested info/export/edit/delete controls.
 
-## Extended UI integration notes
+## Current library-drag implementation and performance change
 
-Prior local reference was the user's `saves\mods\salivionextended-ui.zip`, internal mod name `extended-ui`, particularly `scripts/ui/other/schematics-table-ui.js`:
+- The previous implementation recursively scanned the vanilla schematic dialog every 200 ms while it was open and bound listeners to discovered schematic cards.
+- That recurring full-dialog scan and its array/map bookkeeping have been removed.
+- The current script installs one non-consuming capture listener on `Vars.ui.schematics`. At press time it hit-tests once, walks up the actor hierarchy to find a card button containing a `SchematicsDialog.SchematicImage`, and reads that image's private `schematic` field.
+- A per-frame updater is created only while a card press is a drag candidate, then removed when the candidate ends or is cancelled.
+- The latest hit-test correction has passed script syntax and diff checks, but library dragging and normal card interactions still require in-game verification. Do not claim the regression is runtime-fixed until confirmed.
+- Avoid reintroducing recurring dialog scans. If card identification fails, inspect the actual hit actor/card hierarchy and logs first.
 
-- Update integration: `global.eui.registerUpdate(fn)`.
-- Rebuild: `global.eui.schematicsTableUI.rebuildTable()`.
-- HUD table name: `eui-schematics-table`.
-- EUI rebuild destroys/recreates the table and slot buttons.
-- Structure: outer table -> wrapped child table -> categories at child index 0, category label at index 1, schematic slots at child index 2.
-- Slot key: `schematic<category>.<column>.<row>`; custom image key is slot key plus `image`.
-- Normal slot use calls `Vars.control.input.useSchematic(schematic)`.
-- Desktop right-click editing and mobile double-tap behavior belong to EUI and must remain intact.
+## Extended UI integration
 
-Verify current dependency APIs against the installed Extended UI source before changing its settings or rebuild behavior.
+The inspected Extended UI copy is the user's `saves\mods\zipextract\Salivion-Extended-UI-54ad91f` (internal mod name `extended-ui`):
 
-## Script implementation notes
+- The table is named `eui-schematics-table`; its direct settings keys use `schematic<category>.<column>.<row>` and append `image` for custom images.
+- EUI exposes `global.eui.registerUpdate(fn)` and `global.eui.schematicsTableUI.rebuildTable()`.
+- The live structure is outer table -> wrapped table -> categories at child 0, label at child 1, slots at child 2.
+- EUI rebuilds the table and slot actors. The mod binds direct capture listeners to live slot buttons and rebinds when their identities change.
+- Normal slot use calls `Vars.control.input.useSchematic(schematic)`. Preserve EUI's right-click edit and mobile double-tap behavior.
 
-- `scripts/main.js` uses direct capture `InputListener`s on live table slot buttons; do not revert to table-parent coordinate hit testing without a specific reason.
-- It rebinds when EUI replaces slot buttons by comparing object identities.
-- It uses live category state to support cross-category moves.
-- Stale source/destination settings are checked before writing.
-- The script is the complete mod entry point; keep packaging and user instructions script-only.
-- Library-card integration must bind only to live actors, tolerate the dialog rebuilding its cards, and log reflection or update failures explicitly.
-- Library insertion writes the schematic name into the destination EUI setting, preserves the slot's custom image setting, confirms replacement when occupied, and refreshes the table after insertion.
+## Reference sources
 
-## Validation
+- Local Mindustry source: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\Mindustry source code and Libraries\Mindustry-160.7`
+- Matching Arc source: `C:\Program Files (x86)\Steam\steamapps\common\Mindustry\Mindustry source code and Libraries\Arc-7445105cd2683daf5b9ac7033ebb07265d3e814d`
+- The user's installed game build may differ; check the game log header when exact runtime compatibility matters.
 
-- Use available script syntax checks such as `node --check scripts\main.js` and focused interaction tests.
-- Runtime behavior, especially pointer tracking after hiding the modal library dialog, requires in-game testing. Do not claim runtime success based only on syntax checks.
+## Verification
+
+- Run `node --check scripts\main.js` and `git diff --check` for script changes.
+- UI behavior requires in-game testing. For library drag, test normal card use; nested controls; search/filter rebuilds; hold threshold; empty and occupied table destinations; cancellation; and release outside the table. Also re-test table-to-table move behavior.
+- Never claim runtime success from syntax checks alone.

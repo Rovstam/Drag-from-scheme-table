@@ -9,7 +9,6 @@ const scriptVersion = "1.0.2";
 const dragThresholdSquared = 64;
 const dragPreviewScale = 1.35;
 const libraryHoldMillis = 400;
-const libraryScanIntervalMillis = 200;
 
 let moveMode = false;
 let selectedSlot = null;
@@ -32,10 +31,12 @@ let swapSettingInstalled = false;
 let swapSettingIntegrationErrorLogged = false;
 let dragPreviewErrorLogged = false;
 let libraryDragUpdater;
-let libraryBoundImages = [];
+let libraryBoundImages = new Packages.java.util.IdentityHashMap();
+let libraryRebuildField;
+let libraryWrappedRebuild;
+let libraryBindingError;
 let libraryCandidate;
 let libraryPreview;
-let libraryLastScan;
 let libraryLastUpdateError;
 let libraryInsertConfirmationOpen = false;
 
@@ -149,6 +150,7 @@ function clearLibraryDrag() {
         libraryPreview = null;
     }
     libraryCandidate = null;
+    stopLibraryDragController();
 }
 
 function cancelLibraryDrag(restoreLibrary) {
@@ -165,79 +167,131 @@ function getLibrarySchematic(image) {
     return field.get(image);
 }
 
-function bindLibraryCards(element, visibleImages) {
+function bindLibraryCards(element, currentImages) {
     const SchematicImage = Packages.mindustry.ui.dialogs.SchematicsDialog.SchematicImage;
     if (element instanceof SchematicImage) {
-        visibleImages.push(element);
-        if (libraryBoundImages.indexOf(element) < 0) {
+        currentImages.put(element, true);
+        if (!libraryBoundImages.containsKey(element)) {
             let schematic;
             try {
                 schematic = getLibrarySchematic(element);
             } catch (error) {
-                libraryBoundImages.push(element);
                 Log.err("[Drag from Scheme Table] Could not read the schematic associated with a library card: " + error);
                 return;
             }
+
             let card = element.parent;
             while (card != null && !(card instanceof Button)) {
                 card = card.parent;
             }
 
-            if (schematic != null && card instanceof Button) {
-                const boundCard = card;
-                const boundSchematic = schematic;
-                card.addCaptureListener(new JavaAdapter(Packages.arc.scene.event.InputListener, {
-                    touchDown: function(event, x, y, pointer, button) {
-                        if (button != Packages.arc.input.KeyCode.mouseLeft ||
-                            !Vars.state.isGame() || !visualDragEnabled || libraryCandidate != null ||
-                            !Core.settings.getBool("eui-ShowSchematicsTable", true) ||
-                            !Vars.ui.schematics.isShown()) return false;
-
-                        let pressed = Core.scene.hit(event.stageX, event.stageY, true);
-                        while (pressed != null && !(pressed instanceof Button)) {
-                            pressed = pressed.parent;
-                        }
-                        if (pressed !== boundCard) return false;
-
-                        libraryCandidate = {
-                            card: boundCard,
-                            schematic: boundSchematic,
-                            pointer: pointer,
-                            startX: event.stageX,
-                            startY: event.stageY,
-                            startedAt: Packages.arc.util.Time.millis(),
-                            dragging: false
-                        };
-                        dbg("Library press captured for " + boundSchematic.name() + ".");
-                        return false;
-                    }
-                }));
-            } else {
+            if (schematic == null || !(card instanceof Button)) {
                 Log.warn("[Drag from Scheme Table] Found a schematic library image without a card button; drag not bound.");
+                return;
             }
+
+            const boundCard = card;
+            const boundSchematic = schematic;
+            card.addCaptureListener(new JavaAdapter(Packages.arc.scene.event.InputListener, {
+                touchDown: function(event, x, y, pointer, button) {
+                    if (button != Packages.arc.input.KeyCode.mouseLeft ||
+                        !Vars.state.isGame() || !visualDragEnabled || libraryCandidate != null ||
+                        !Core.settings.getBool("eui-ShowSchematicsTable", true) ||
+                        !Vars.ui.schematics.isShown()) return false;
+
+                    let pressed = Core.scene.hit(event.stageX, event.stageY, true);
+                    while (pressed != null && !(pressed instanceof Button)) {
+                        pressed = pressed.parent;
+                    }
+                    if (pressed !== boundCard) return false;
+
+                    libraryCandidate = {
+                        card: boundCard,
+                        schematic: boundSchematic,
+                        pointer: pointer,
+                        startX: event.stageX,
+                        startY: event.stageY,
+                        startedAt: Packages.arc.util.Time.millis(),
+                        dragging: false
+                    };
+                    installLibraryDragController();
+                    dbg("Library press captured for " + boundSchematic.name() + ".");
+                    return false;
+                }
+            }));
         }
+        return;
     }
 
     if (!(element instanceof Packages.arc.scene.Group)) return;
     const children = element.getChildren();
     for (let i = 0; i < children.size; i++) {
-        bindLibraryCards(children.get(i), visibleImages);
+        bindLibraryCards(children.get(i), currentImages);
     }
 }
 
 function scanLibraryCards() {
     if (!Vars.ui.schematics.isShown()) {
-        if (libraryCandidate != null && !libraryCandidate.dragging) libraryCandidate = null;
-        libraryBoundImages = [];
+        libraryBoundImages = new Packages.java.util.IdentityHashMap();
+        if (libraryCandidate != null && !libraryCandidate.dragging) clearLibraryDrag();
         return;
     }
 
-    const visibleImages = [];
+    const currentImages = new Packages.java.util.IdentityHashMap();
     const children = Vars.ui.schematics.cont.getChildren();
     for (let i = 0; i < children.size; i++) {
-        bindLibraryCards(children.get(i), visibleImages);
+        bindLibraryCards(children.get(i), currentImages);
     }
-    libraryBoundImages = visibleImages;
+    libraryBoundImages = currentImages;
+}
+
+function bindLibraryRebuildHook() {
+    if (!Vars.ui.schematics.isShown()) return;
+
+    try {
+        if (libraryRebuildField == null) {
+            libraryRebuildField = Vars.ui.schematics.getClass().getDeclaredField("rebuildPane");
+            libraryRebuildField.setAccessible(true);
+        }
+
+        const rebuild = libraryRebuildField.get(Vars.ui.schematics);
+        if (rebuild == null) throw new Error("SchematicsDialog.rebuildPane is null.");
+
+        if (libraryWrappedRebuild == null || !rebuild.equals(libraryWrappedRebuild)) {
+            const originalRebuild = rebuild;
+            const wrappedRebuild = new JavaAdapter(Packages.java.lang.Runnable, {
+                run: function() {
+                    originalRebuild.run();
+                    scanLibraryCards();
+                }
+            });
+            libraryRebuildField.set(Vars.ui.schematics, wrappedRebuild);
+            libraryWrappedRebuild = wrappedRebuild;
+        }
+
+        scanLibraryCards();
+        dbg("Bound " + libraryBoundImages.size() + " vanilla library schematic cards.");
+        libraryBindingError = null;
+    } catch (error) {
+        const message = String(error);
+        if (message !== libraryBindingError) {
+            Log.err("[Drag from Scheme Table] Could not hook schematic library rebuilds: " + message);
+            libraryBindingError = message;
+        }
+    }
+}
+
+function installLibraryPressListener() {
+    if (Vars.headless) return;
+    Vars.ui.schematics.shown(() => Core.app.post(bindLibraryRebuildHook));
+    Vars.ui.schematics.resized(bindLibraryRebuildHook);
+    Vars.ui.schematics.hidden(() => {
+        libraryBoundImages = new Packages.java.util.IdentityHashMap();
+        if (libraryCandidate != null && !libraryCandidate.dragging) clearLibraryDrag();
+    });
+    Events.on(Packages.mindustry.game.EventType.ResizeEvent, () => {
+        if (Vars.ui.schematics.isShown()) bindLibraryRebuildHook();
+    });
 }
 
 function libraryPointerDown(drag) {
@@ -395,21 +449,12 @@ function updateLibraryDrag() {
         return;
     }
 
-    if (libraryCandidate == null || !libraryCandidate.dragging) {
-        if (Vars.ui.schematics.isShown()) {
-            const now = Packages.arc.util.Time.millis();
-            if (libraryLastScan == null || now - libraryLastScan >= libraryScanIntervalMillis) {
-                scanLibraryCards();
-                libraryLastScan = now;
-                libraryLastUpdateError = null;
-            }
-        } else {
-            libraryBoundImages = [];
-            if (libraryCandidate != null) libraryCandidate = null;
-        }
+    if (libraryCandidate == null) return;
+    if (!libraryCandidate.dragging && !Vars.ui.schematics.isShown()) {
+        clearLibraryDrag();
+        return;
     }
 
-    if (libraryCandidate == null) return;
     if (!libraryPointerDown(libraryCandidate)) {
         if (libraryCandidate.dragging) {
             const completed = libraryCandidate;
@@ -417,7 +462,7 @@ function updateLibraryDrag() {
             clearLibraryDrag();
             finishLibraryDrag(completed, position.x, position.y);
         } else {
-            libraryCandidate = null;
+            clearLibraryDrag();
         }
         return;
     }
@@ -427,7 +472,7 @@ function updateLibraryDrag() {
         const dx = position.x - libraryCandidate.startX;
         const dy = position.y - libraryCandidate.startY;
         if (dx * dx + dy * dy >= dragThresholdSquared) {
-            libraryCandidate = null;
+            clearLibraryDrag();
             return;
         }
         if (Packages.arc.util.Time.millis() - libraryCandidate.startedAt < libraryHoldMillis) return;
@@ -458,6 +503,13 @@ function installLibraryDragController() {
     });
     Core.scene.add(libraryDragUpdater);
     dbg("Library drag controller installed.");
+}
+
+function stopLibraryDragController() {
+    if (libraryDragUpdater == null) return;
+    libraryDragUpdater.remove();
+    libraryDragUpdater = null;
+    dbg("Library drag controller stopped.");
 }
 
 function updateDragPreview(stageX, stageY) {
@@ -821,6 +873,7 @@ Events.on(ClientLoadEvent, () => {
         dbg("Swap confirmation preference " + (skipSwapConfirmations ? "loaded as disabled." : "enabled."));
         visualDragEnabled = Core.settings.getBool(visualDragSetting, true);
         dbg("Visual drag " + (visualDragEnabled ? "enabled." : "disabled."));
+        installLibraryPressListener();
 
         global.eui.registerUpdate(() => {
             try {
@@ -829,6 +882,7 @@ Events.on(ClientLoadEvent, () => {
                 const table = findTable();
                 if (!Core.settings.getBool("eui-ShowSchematicsTable", true)) {
                     clearVisualDrag();
+                    if (libraryCandidate != null) cancelLibraryDrag(true);
                     selectedSlot = null;
                     moveMode = false;
                     return;
@@ -841,12 +895,10 @@ Events.on(ClientLoadEvent, () => {
                     return;
                 }
                 waitingLogged = false;
-
                 bindTableButtons(table);
                 moveButton.setChecked(moveMode);
                 updateHighlight();
                 attachMoveControl(table);
-                installLibraryDragController();
                 lastUpdateError = null;
             } catch (error) {
                 const message = String(error);
