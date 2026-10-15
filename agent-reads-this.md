@@ -10,7 +10,7 @@
 ## Project structure
 
 - Entry point: `scripts/main.js`
-- Manifest: `mod.hjson`, currently version `1.0.2`, `java: false`, `script: true`, dependency `extended-ui`.
+- Manifest: `mod.hjson`, currently version `1.0.3`, `java: false`, `script: true`, dependency `extended-ui`.
 - `JavaAdapter` in `main.js` is Rhino interop for Arc listeners and does not imply a Java build.
 
 ## Existing functionality to preserve
