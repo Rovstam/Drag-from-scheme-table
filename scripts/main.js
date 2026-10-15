@@ -31,11 +31,14 @@ let swapSettingInstalled = false;
 let swapSettingIntegrationErrorLogged = false;
 let dragPreviewErrorLogged = false;
 let libraryDragUpdater;
+let libraryBoundImages = new Packages.java.util.IdentityHashMap();
+let libraryRebuildField;
+let libraryWrappedRebuild;
+let libraryBindingError;
 let libraryCandidate;
 let libraryPreview;
 let libraryLastUpdateError;
 let libraryInsertConfirmationOpen = false;
-let libraryPressListenerInstalled = false;
 
 const DEBUG = true;
 function dbg(message) {
@@ -164,70 +167,131 @@ function getLibrarySchematic(image) {
     return field.get(image);
 }
 
-function findSchematicImage(element) {
+function bindLibraryCards(element, currentImages) {
     const SchematicImage = Packages.mindustry.ui.dialogs.SchematicsDialog.SchematicImage;
-    if (element instanceof SchematicImage) return element;
-    if (!(element instanceof Packages.arc.scene.Group)) return null;
-
-    const children = element.getChildren();
-    for (let i = 0; i < children.size; i++) {
-        const image = findSchematicImage(children.get(i));
-        if (image != null) return image;
-    }
-    return null;
-}
-
-function beginLibraryDragCandidate(event, pointer, button) {
-    if (button != Packages.arc.input.KeyCode.mouseLeft ||
-        !Vars.state.isGame() || !visualDragEnabled || libraryCandidate != null ||
-        !Core.settings.getBool("eui-ShowSchematicsTable", true)) return;
-
-    let actor = Core.scene.hit(event.stageX, event.stageY, true);
-    while (actor != null && actor !== Vars.ui.schematics) {
-        if (actor instanceof Button) {
-            const image = findSchematicImage(actor);
-            if (image == null) return;
-
+    if (element instanceof SchematicImage) {
+        currentImages.put(element, true);
+        if (!libraryBoundImages.containsKey(element)) {
             let schematic;
             try {
-                schematic = getLibrarySchematic(image);
+                schematic = getLibrarySchematic(element);
             } catch (error) {
                 Log.err("[Drag from Scheme Table] Could not read the schematic associated with a library card: " + error);
                 return;
             }
-            if (schematic == null) return;
 
-            libraryCandidate = {
-                card: actor,
-                schematic: schematic,
-                pointer: pointer,
-                startX: event.stageX,
-                startY: event.stageY,
-                startedAt: Packages.arc.util.Time.millis(),
-                dragging: false
-            };
-            installLibraryDragController();
-            dbg("Library press captured for " + schematic.name() + ".");
-            return;
+            let card = element.parent;
+            while (card != null && !(card instanceof Button)) {
+                card = card.parent;
+            }
+
+            if (schematic == null || !(card instanceof Button)) {
+                Log.warn("[Drag from Scheme Table] Found a schematic library image without a card button; drag not bound.");
+                return;
+            }
+
+            const boundCard = card;
+            const boundSchematic = schematic;
+            card.addCaptureListener(new JavaAdapter(Packages.arc.scene.event.InputListener, {
+                touchDown: function(event, x, y, pointer, button) {
+                    if (button != Packages.arc.input.KeyCode.mouseLeft ||
+                        !Vars.state.isGame() || !visualDragEnabled || libraryCandidate != null ||
+                        !Core.settings.getBool("eui-ShowSchematicsTable", true) ||
+                        !Vars.ui.schematics.isShown()) return false;
+
+                    let pressed = Core.scene.hit(event.stageX, event.stageY, true);
+                    while (pressed != null && !(pressed instanceof Button)) {
+                        pressed = pressed.parent;
+                    }
+                    if (pressed !== boundCard) return false;
+
+                    libraryCandidate = {
+                        card: boundCard,
+                        schematic: boundSchematic,
+                        pointer: pointer,
+                        startX: event.stageX,
+                        startY: event.stageY,
+                        startedAt: Packages.arc.util.Time.millis(),
+                        dragging: false
+                    };
+                    installLibraryDragController();
+                    dbg("Library press captured for " + boundSchematic.name() + ".");
+                    return false;
+                }
+            }));
         }
-        actor = actor.parent;
+        return;
+    }
+
+    if (!(element instanceof Packages.arc.scene.Group)) return;
+    const children = element.getChildren();
+    for (let i = 0; i < children.size; i++) {
+        bindLibraryCards(children.get(i), currentImages);
+    }
+}
+
+function scanLibraryCards() {
+    if (!Vars.ui.schematics.isShown()) {
+        libraryBoundImages = new Packages.java.util.IdentityHashMap();
+        if (libraryCandidate != null && !libraryCandidate.dragging) clearLibraryDrag();
+        return;
+    }
+
+    const currentImages = new Packages.java.util.IdentityHashMap();
+    const children = Vars.ui.schematics.cont.getChildren();
+    for (let i = 0; i < children.size; i++) {
+        bindLibraryCards(children.get(i), currentImages);
+    }
+    libraryBoundImages = currentImages;
+}
+
+function bindLibraryRebuildHook() {
+    if (!Vars.ui.schematics.isShown()) return;
+
+    try {
+        if (libraryRebuildField == null) {
+            libraryRebuildField = Vars.ui.schematics.getClass().getDeclaredField("rebuildPane");
+            libraryRebuildField.setAccessible(true);
+        }
+
+        const rebuild = libraryRebuildField.get(Vars.ui.schematics);
+        if (rebuild == null) throw new Error("SchematicsDialog.rebuildPane is null.");
+
+        if (libraryWrappedRebuild == null || !rebuild.equals(libraryWrappedRebuild)) {
+            const originalRebuild = rebuild;
+            const wrappedRebuild = new JavaAdapter(Packages.java.lang.Runnable, {
+                run: function() {
+                    originalRebuild.run();
+                    scanLibraryCards();
+                }
+            });
+            libraryRebuildField.set(Vars.ui.schematics, wrappedRebuild);
+            libraryWrappedRebuild = wrappedRebuild;
+        }
+
+        scanLibraryCards();
+        dbg("Bound " + libraryBoundImages.size() + " vanilla library schematic cards.");
+        libraryBindingError = null;
+    } catch (error) {
+        const message = String(error);
+        if (message !== libraryBindingError) {
+            Log.err("[Drag from Scheme Table] Could not hook schematic library rebuilds: " + message);
+            libraryBindingError = message;
+        }
     }
 }
 
 function installLibraryPressListener() {
-    if (libraryPressListenerInstalled || Vars.headless) return;
-    Vars.ui.schematics.addCaptureListener(new JavaAdapter(Packages.arc.scene.event.InputListener, {
-        touchDown: function(event, x, y, pointer, button) {
-            if (!Vars.ui.schematics.isShown()) return false;
-            try {
-                beginLibraryDragCandidate(event, pointer, button);
-            } catch (error) {
-                Log.err("[Drag from Scheme Table] Could not capture a schematic library press: " + error);
-            }
-            return false;
-        }
-    }));
-    libraryPressListenerInstalled = true;
+    if (Vars.headless) return;
+    Vars.ui.schematics.shown(() => Core.app.post(bindLibraryRebuildHook));
+    Vars.ui.schematics.resized(bindLibraryRebuildHook);
+    Vars.ui.schematics.hidden(() => {
+        libraryBoundImages = new Packages.java.util.IdentityHashMap();
+        if (libraryCandidate != null && !libraryCandidate.dragging) clearLibraryDrag();
+    });
+    Events.on(Packages.mindustry.game.EventType.ResizeEvent, () => {
+        if (Vars.ui.schematics.isShown()) bindLibraryRebuildHook();
+    });
 }
 
 function libraryPointerDown(drag) {
