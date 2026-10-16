@@ -5,7 +5,7 @@ const columnsSetting = "eui-SchematicsTableColumns";
 const tableName = "eui-schematics-table";
 const skipSwapConfirmationsSetting = "drag-scheme-table.skip-swap-confirmations";
 const visualDragSetting = "drag-scheme-table.visual-drag";
-const scriptVersion = "1.0.2";
+const scriptVersion = "1.0.3";
 const dragThresholdSquared = 64;
 const dragPreviewScale = 1.35;
 const libraryHoldMillis = 400;
@@ -31,14 +31,12 @@ let swapSettingInstalled = false;
 let swapSettingIntegrationErrorLogged = false;
 let dragPreviewErrorLogged = false;
 let libraryDragUpdater;
-let libraryBoundImages = new Packages.java.util.IdentityHashMap();
-let libraryRebuildField;
-let libraryWrappedRebuild;
-let libraryBindingError;
+let librarySchematicField;
 let libraryCandidate;
 let libraryPreview;
 let libraryLastUpdateError;
 let libraryInsertConfirmationOpen = false;
+let libraryPressListenerInstalled = false;
 
 const DEBUG = true;
 function dbg(message) {
@@ -162,136 +160,104 @@ function cancelLibraryDrag(restoreLibrary) {
 }
 
 function getLibrarySchematic(image) {
-    const field = image.getClass().getDeclaredField("schematic");
-    field.setAccessible(true);
-    return field.get(image);
+    if (librarySchematicField == null) {
+        librarySchematicField = image.getClass().getDeclaredField("schematic");
+        librarySchematicField.setAccessible(true);
+    }
+    return librarySchematicField.get(image);
 }
 
-function bindLibraryCards(element, currentImages) {
-    const SchematicImage = Packages.mindustry.ui.dialogs.SchematicsDialog.SchematicImage;
-    if (element instanceof SchematicImage) {
-        currentImages.put(element, true);
-        if (!libraryBoundImages.containsKey(element)) {
-            let schematic;
-            try {
-                schematic = getLibrarySchematic(element);
-            } catch (error) {
-                Log.err("[Drag from Scheme Table] Could not read the schematic associated with a library card: " + error);
-                return;
-            }
+function findSchematicImage(element) {
+    if (element == null) return null;
+    if (String(element.getClass().getName()) ===
+        "mindustry.ui.dialogs.SchematicsDialog$SchematicImage") return element;
+    if (!(element instanceof Packages.arc.scene.Group)) return null;
 
-            let card = element.parent;
-            while (card != null && !(card instanceof Button)) {
-                card = card.parent;
-            }
-
-            if (schematic == null || !(card instanceof Button)) {
-                Log.warn("[Drag from Scheme Table] Found a schematic library image without a card button; drag not bound.");
-                return;
-            }
-
-            const boundCard = card;
-            const boundSchematic = schematic;
-            card.addCaptureListener(new JavaAdapter(Packages.arc.scene.event.InputListener, {
-                touchDown: function(event, x, y, pointer, button) {
-                    if (button != Packages.arc.input.KeyCode.mouseLeft ||
-                        !Vars.state.isGame() || !visualDragEnabled || libraryCandidate != null ||
-                        !Core.settings.getBool("eui-ShowSchematicsTable", true) ||
-                        !Vars.ui.schematics.isShown()) return false;
-
-                    let pressed = Core.scene.hit(event.stageX, event.stageY, true);
-                    while (pressed != null && !(pressed instanceof Button)) {
-                        pressed = pressed.parent;
-                    }
-                    if (pressed !== boundCard) return false;
-
-                    libraryCandidate = {
-                        card: boundCard,
-                        schematic: boundSchematic,
-                        pointer: pointer,
-                        startX: event.stageX,
-                        startY: event.stageY,
-                        startedAt: Packages.arc.util.Time.millis(),
-                        dragging: false
-                    };
-                    installLibraryDragController();
-                    dbg("Library press captured for " + boundSchematic.name() + ".");
-                    return false;
-                }
-            }));
-        }
-        return;
-    }
-
-    if (!(element instanceof Packages.arc.scene.Group)) return;
     const children = element.getChildren();
     for (let i = 0; i < children.size; i++) {
-        bindLibraryCards(children.get(i), currentImages);
+        const image = findSchematicImage(children.get(i));
+        if (image != null) return image;
     }
-}
-
-function scanLibraryCards() {
-    if (!Vars.ui.schematics.isShown()) {
-        libraryBoundImages = new Packages.java.util.IdentityHashMap();
-        if (libraryCandidate != null && !libraryCandidate.dragging) clearLibraryDrag();
-        return;
-    }
-
-    const currentImages = new Packages.java.util.IdentityHashMap();
-    const children = Vars.ui.schematics.cont.getChildren();
-    for (let i = 0; i < children.size; i++) {
-        bindLibraryCards(children.get(i), currentImages);
-    }
-    libraryBoundImages = currentImages;
-}
-
-function bindLibraryRebuildHook() {
-    if (!Vars.ui.schematics.isShown()) return;
-
-    try {
-        if (libraryRebuildField == null) {
-            libraryRebuildField = Vars.ui.schematics.getClass().getDeclaredField("rebuildPane");
-            libraryRebuildField.setAccessible(true);
-        }
-
-        const rebuild = libraryRebuildField.get(Vars.ui.schematics);
-        if (rebuild == null) throw new Error("SchematicsDialog.rebuildPane is null.");
-
-        if (libraryWrappedRebuild == null || !rebuild.equals(libraryWrappedRebuild)) {
-            const originalRebuild = rebuild;
-            const wrappedRebuild = new JavaAdapter(Packages.java.lang.Runnable, {
-                run: function() {
-                    originalRebuild.run();
-                    scanLibraryCards();
-                }
-            });
-            libraryRebuildField.set(Vars.ui.schematics, wrappedRebuild);
-            libraryWrappedRebuild = wrappedRebuild;
-        }
-
-        scanLibraryCards();
-        dbg("Bound " + libraryBoundImages.size() + " vanilla library schematic cards.");
-        libraryBindingError = null;
-    } catch (error) {
-        const message = String(error);
-        if (message !== libraryBindingError) {
-            Log.err("[Drag from Scheme Table] Could not hook schematic library rebuilds: " + message);
-            libraryBindingError = message;
-        }
-    }
+    return null;
 }
 
 function installLibraryPressListener() {
-    if (Vars.headless) return;
-    Vars.ui.schematics.shown(() => Core.app.post(bindLibraryRebuildHook));
-    Vars.ui.schematics.resized(bindLibraryRebuildHook);
+    if (libraryPressListenerInstalled || Vars.headless) return;
+
+    Vars.ui.schematics.addCaptureListener(new JavaAdapter(Packages.arc.scene.event.InputListener, {
+        touchDown: function(event, x, y, pointer, button) {
+            const targetPath = [];
+            let target = event.targetActor;
+            while (target != null && targetPath.length < 12) {
+                targetPath.push(String(target.getClass().getName()));
+                if (target === Vars.ui.schematics) break;
+                target = target.parent;
+            }
+            dbg("Library touchDown: button=" + button +
+                ", shown=" + Vars.ui.schematics.isShown() +
+                ", inGame=" + Vars.state.isGame() +
+                ", visualDrag=" + visualDragEnabled +
+                ", candidateActive=" + (libraryCandidate != null) +
+                ", tableEnabled=" + Core.settings.getBool("eui-ShowSchematicsTable", true) +
+                ", targetPath=" + targetPath.join(" -> "));
+
+            if (button != Packages.arc.input.KeyCode.mouseLeft) {
+                dbg("Library press ignored: not the left mouse button.");
+                return false;
+            }
+            if (!Vars.ui.schematics.isShown() || !Vars.state.isGame() ||
+                !visualDragEnabled || libraryCandidate != null ||
+                !Core.settings.getBool("eui-ShowSchematicsTable", true)) {
+                dbg("Library press ignored by state/settings guard.");
+                return false;
+            }
+
+            let image = findSchematicImage(event.targetActor);
+            let card = event.targetActor;
+            while (card != null && !(card instanceof Button)) {
+                card = card.parent;
+            }
+            if (card == null) {
+                dbg("Library press target has no Button ancestor.");
+                return false;
+            }
+
+            if (image == null) image = findSchematicImage(card);
+            if (image == null) {
+                dbg("Library press nearest Button contains no schematic image: " +
+                    String(card.getClass().getName()) + ".");
+                return false;
+            }
+
+            let schematic;
+            try {
+                schematic = getLibrarySchematic(image);
+            } catch (error) {
+                Log.err("[Drag from Scheme Table] Could not read the schematic associated with a library card: " + error);
+                return false;
+            }
+            if (schematic == null) return false;
+
+            libraryCandidate = {
+                card: card,
+                schematic: schematic,
+                pointer: pointer,
+                startX: event.stageX,
+                startY: event.stageY,
+                startedAt: Packages.arc.util.Time.millis(),
+                dragging: false
+            };
+            installLibraryDragController();
+            dbg("Library press captured for " + schematic.name() + ".");
+            return false;
+        }
+    }));
+
     Vars.ui.schematics.hidden(() => {
-        libraryBoundImages = new Packages.java.util.IdentityHashMap();
         if (libraryCandidate != null && !libraryCandidate.dragging) clearLibraryDrag();
     });
-    Events.on(Packages.mindustry.game.EventType.ResizeEvent, () => {
-        if (Vars.ui.schematics.isShown()) bindLibraryRebuildHook();
-    });
+    libraryPressListenerInstalled = true;
+    dbg("Installed on-demand schematic library press listener.");
 }
 
 function libraryPointerDown(drag) {

@@ -22,14 +22,27 @@
 - The vanilla-library-to-table feature uses a stationary hold of about 0.4 seconds, then shows a pointer-following preview. Empty destinations insert; occupied destinations ask for confirmation; drops outside the table do nothing.
 - Preserve normal vanilla schematic-card clicks and nested info/export/edit/delete controls.
 
-## Current library-drag implementation and performance change
+## Current library-drag implementation and performance goal
 
-- The previous implementation recursively scanned the vanilla schematic dialog every 200 ms while it was open and bound listeners to discovered schematic cards.
-- That recurring full-dialog scan and its array/map bookkeeping have been removed.
-- The current script installs one non-consuming capture listener on `Vars.ui.schematics`. At press time it hit-tests once, walks up the actor hierarchy to find a card button containing a `SchematicsDialog.SchematicImage`, and reads that image's private `schematic` field.
-- A per-frame updater is created only while a card press is a drag candidate, then removed when the candidate ends or is cancelled.
-- The latest hit-test correction has passed script syntax and diff checks, but library dragging and normal card interactions still require in-game verification. Do not claim the regression is runtime-fixed until confirmed.
-- Avoid reintroducing recurring dialog scans. If card identification fails, inspect the actual hit actor/card hierarchy and logs first.
+- For the reusable Rhino UI input-debugging and performance-discovery workflow, see [the Mindustry Rhino Scripts skill](../.github/skills/mindustry-rhino-scripts/SKILL.md). This project note records the mod-specific findings below.
+- The old working implementation recursively scanned the vanilla schematic dialog every 200 ms while it was open and attached a capture listener to every discovered schematic card. The repeated idle scans were removed.
+- Current runtime behavior has been confirmed by the user: the optimized library-card drag works, including the floating schematic preview. The previous working implementation caused a severe performance hit; whether the on-demand implementation fully resolves that hit still needs user verification.
+- The previous working script scanned dialog content after it opened and after pane rebuild/resize events. It recursively visited the actor tree, reflected each `SchematicImage`'s private `schematic` field, and attached a direct capture listener to each card. This open-time full-tree scan and listener setup are a plausible cause of the hitch, but their cost was not measured.
+- The current optimization removes the open/rebuild scans and per-card listeners. A single capture listener on `Vars.ui.schematics` uses `InputEvent.targetActor` ancestry to find the pressed card and searches only that card for its `SchematicImage`; the schematic reflection field is cached after first use.
+- The matching local Arc source confirms `targetActor` is set to the original event target and remains available during ancestor capture. Runtime logs showed the target itself is `SchematicsDialog$SchematicImage`. The working fix resolves that target as an image before walking upward to its card button; only if the target is not itself the image does it search the nearest button's subtree. Do not reverse this order: searching the nearest button first failed because it found no schematic image.
+- Image recognition uses the exact Java class name `mindustry.ui.dialogs.SchematicsDialog$SchematicImage`, because the script's `instanceof` test did not recognize the runtime target. Keep this class-name check aligned with the verified runtime trace.
+- Temporary press diagnostics currently log the input button, dialog/game/settings guards, and target ancestor chain, plus which image/card resolution step fails. Remove or gate this verbose trace after the interaction is fully validated; retain concise error logging for actual failures.
+- After binding, the card listeners do not themselves poll every frame. A per-frame updater is created only after a card press becomes a drag candidate, then removed when the candidate ends or is cancelled.
+- Focus the next performance investigation on the transition immediately after opening, distinguishing mod work from vanilla dialog/card construction and from later idle/rebuild/drag costs. Do not assume an open-time scan explains performance degradation that continues while idle.
+- The on-demand target path has passed a user in-game test: the library drag preview appears. Continue verifying actual slot drop, occupied-slot confirmation, cancellation, nested controls, and ordinary schematic click behavior.
+- Do not reintroduce recurring or open-time full-dialog scans. Preserve normal card clicks, nested info/export/edit/delete actions, hold/movement thresholds, preview, drops, confirmation, cancellation, and the existing EUI table MOVE/swap behavior.
+
+## Future library feature: multi-select/batch insertion
+
+- Multi-select from the vanilla library and placing multiple schematics into the EUI table is a separate future feature, not part of the immediate performance fix.
+- Keep schematic data (`Schematic` objects) distinct from card icons/previews. The current drag resolves the actual schematic from `SchematicsDialog.SchematicImage`; preserve this separation if a collection of selected schematics is introduced later.
+- A future batch-placement feature needs explicit rules for destination order, occupied slots and confirmation, preserving or replacing existing schematics, and what happens when the selected count exceeds available slots. Do not overwrite current slots implicitly.
+- Design the current single-schematic insertion so future collection/batch handling can be added without replacing the existing one-at-a-time drag interaction or table MOVE behavior.
 
 ## Extended UI integration
 

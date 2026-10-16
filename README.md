@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/1c3fc178-d382-4991-8ba5-e02048ce9bf8
 
 While in a game with the Extended UI schematic table enabled, press and hold a schematic card in the library without moving for about 0.4 seconds. When the library closes and its preview follows the pointer, drag it onto a table slot. Empty slots receive the schematic; occupied slots ask for confirmation. Releasing outside a table slot leaves the table unchanged. The library's ordinary click, info, export, edit, and delete actions are left available.
 
-**Performance note:** The library-drag feature currently causes a severe performance hit in the vanilla schematic library. This is a known issue and is the next optimization goal. The table MOVE and swap features continue to work normally.
+**Performance note:** The previous working library-drag implementation caused a severe performance hit in the vanilla schematic library. The current version avoids scanning and binding every card when the library opens, but this optimization still needs in-game performance and drag verification. The table MOVE and swap features are unchanged.
 
 **Enable visual schematic dragging** in **Settings > Extended UI** controls both table-to-table dragging and library insertion. When disabled, table click-to-select/click-to-move continues to work.
 
