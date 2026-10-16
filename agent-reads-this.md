@@ -10,7 +10,7 @@
 ## Project structure
 
 - Entry point: `scripts/main.js`
-- Manifest: `mod.hjson`, currently version `1.0.2`, `java: false`, `script: true`, dependency `extended-ui`.
+- Manifest: `mod.hjson`, currently version `1.0.3`, `java: false`, `script: true`, dependency `extended-ui`.
 - `JavaAdapter` in `main.js` is Rhino interop for Arc listeners and does not imply a Java build.
 
 ## Existing functionality to preserve
@@ -22,14 +22,23 @@
 - The vanilla-library-to-table feature uses a stationary hold of about 0.4 seconds, then shows a pointer-following preview. Empty destinations insert; occupied destinations ask for confirmation; drops outside the table do nothing.
 - Preserve normal vanilla schematic-card clicks and nested info/export/edit/delete controls.
 
-## Current library-drag implementation and performance change
+## Current library-drag implementation and performance goal
 
-- The previous implementation recursively scanned the vanilla schematic dialog every 200 ms while it was open and bound listeners to discovered schematic cards.
-- That recurring full-dialog scan and its array/map bookkeeping have been removed.
-- The current script installs one non-consuming capture listener on `Vars.ui.schematics`. At press time it hit-tests once, walks up the actor hierarchy to find a card button containing a `SchematicsDialog.SchematicImage`, and reads that image's private `schematic` field.
-- A per-frame updater is created only while a card press is a drag candidate, then removed when the candidate ends or is cancelled.
-- The latest hit-test correction has passed script syntax and diff checks, but library dragging and normal card interactions still require in-game verification. Do not claim the regression is runtime-fixed until confirmed.
-- Avoid reintroducing recurring dialog scans. If card identification fails, inspect the actual hit actor/card hierarchy and logs first.
+- The old working implementation recursively scanned the vanilla schematic dialog every 200 ms while it was open and attached a capture listener to every discovered schematic card. The repeated idle scans were removed.
+- Current runtime behavior has been confirmed by the user: library-card drag works, but opening/using the vanilla schematic library causes a severe performance hit.
+- The current script scans the dialog content after it opens and after pane rebuild/resize events. It recursively visits the actor tree, reflects each `SchematicImage`'s private `schematic` field, and attaches a direct capture listener to each card. The open-time full-tree scan and listener setup are a plausible cause of a hitch immediately after opening; their cost has not yet been measured.
+- After binding, the card listeners do not themselves poll every frame. A per-frame updater is created only after a card press becomes a drag candidate, then removed when the candidate ends or is cancelled.
+- Focus the next performance investigation on work immediately after dialog open, distinguishing the open-time scan from vanilla dialog construction and later rebuilds. Do not assume the opening scan explains performance degradation that continues while idle; measure/profile before changing behavior.
+- Preferred optimization direction: remove the open-time full-tree scan by identifying the pressed schematic card on demand through a single dialog-level capture listener and the actual input event target/actor ancestry. This route is not yet proven reliable in-game; previous attempts to replace direct card listeners regressed drag detection. Verify target semantics against the matching Arc source and in-game before adopting it.
+- If on-demand target identification proves unreliable, consider a bounded/incremental binding strategy that avoids a synchronous full scan on the opening frame. Preserve the working direct-card detection as the behavior reference until an alternative passes runtime tests.
+- Do not reintroduce recurring full-dialog scans. Preserve normal card clicks, nested info/export/edit/delete actions, hold/movement thresholds, preview, drops, confirmation, cancellation, and the existing EUI table MOVE/swap behavior.
+
+## Future library feature: multi-select/batch insertion
+
+- Multi-select from the vanilla library and placing multiple schematics into the EUI table is a separate future feature, not part of the immediate performance fix.
+- Keep schematic data (`Schematic` objects) distinct from card icons/previews. The current drag resolves the actual schematic from `SchematicsDialog.SchematicImage`; preserve this separation if a collection of selected schematics is introduced later.
+- A future batch-placement feature needs explicit rules for destination order, occupied slots and confirmation, preserving or replacing existing schematics, and what happens when the selected count exceeds available slots. Do not overwrite current slots implicitly.
+- Design the current single-schematic insertion so future collection/batch handling can be added without replacing the existing one-at-a-time drag interaction or table MOVE behavior.
 
 ## Extended UI integration
 
