@@ -6,19 +6,20 @@ The vanilla schematic-library-to-Extended-UI-table drag feature now works in-gam
 
 ## Current behavior and diagnosis
 
-- Library cards are discovered recursively and receive a capture listener directly on their card button.
-- The schematic pane is scanned after it opens and after vanilla pane rebuilds (including search/tag and resize rebuild paths); there is no fixed-interval idle scanner.
-- Opening triggers a full-tree walk, schematic-field reflection, and per-card listener setup. This is a plausible source of an opening hitch, but its cost has not been measured or isolated from vanilla dialog/card construction.
+- Previous working implementation discovered library cards with a full recursive scan after the dialog opened and after pane rebuilds, then attached a capture listener to each card.
+- The current optimization removes that open/rebuild scan and per-card listener setup. A single capture listener on the dialog uses Arc's `InputEvent.targetActor` ancestry to locate the pressed card and searches only that card for its schematic image. The schematic field is reflected lazily and cached.
+- The matching local Arc source confirms `targetActor` is the original event target during ancestor capture. The new runtime path has not yet been confirmed in-game.
+- The old scan/listener setup is a plausible cause of the previously observed opening hitch, but its cost was not measured or isolated from vanilla dialog/card construction.
 - A per-press candidate is polled only while the user is holding a card. After the hold threshold, the preview follows the pointer and the vanilla library closes.
-- Library drag behavior has been confirmed by the user. Do not assume the open-time scan explains a slowdown that continues after opening without input; measure the open transition separately from idle browsing, rebuilds, and active dragging.
+- The previous direct-card implementation's drag behavior was confirmed by the user. Test the new event-target implementation before considering the feature preserved. Do not assume the open-time scan explains a slowdown that continues after opening without input; measure open, idle, rebuild, and active-drag behavior separately.
 
 ## Performance-fix requirements
 
-1. Compare the opening hitch with and without the mod, and distinguish dialog-open work from idle browsing, card press/hold, active preview movement, and later pane rebuilds.
-2. Measure/profile the library-drag open-time path before changing it; distinguish mod work from vanilla library construction.
-3. Prefer eliminating the open-time full-tree scan by identifying a pressed schematic card on demand through a dialog-level capture listener and the actual event target/actor ancestry. This route is not yet proven reliable; previous dialog-level attempts lost drag detection, so validate the target semantics and runtime behavior before relying on it.
+1. Compare opening performance with and without the mod; distinguish the open transition from idle browsing, card press/hold, active preview movement, and later pane rebuilds.
+2. Runtime-test the current on-demand target-actor path. If detection fails, inspect runtime event targets before choosing a fallback.
+3. Measure/profile the old full scan against the new open path where practical; distinguish mod work from vanilla library construction.
 4. If on-demand identification is unreliable, consider bounded/incremental binding that avoids a synchronous full scan on the opening frame. Keep direct per-card binding as the known-working behavior reference until an alternative passes runtime tests.
-5. Do not reintroduce recurring full-tree scans. Avoid redundant hit-tests, reflection, allocations, and logging in hot paths where not required.
+5. Do not reintroduce recurring or open-time full-tree scans. Avoid redundant hit-tests, reflection, allocations, and logging in hot paths where not required.
 6. Preserve card click behavior and nested info/export/edit/delete controls.
 7. Preserve drag hold and movement thresholds, preview lifecycle, pointer release/drop behavior, occupied-slot confirmation, cancellation, and table refresh.
 8. Keep the existing Extended UI table-to-table MOVE, swap, and custom-image behavior untouched.
